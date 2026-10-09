@@ -48,3 +48,6 @@ yarn-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# Vercel
+.vercel/
