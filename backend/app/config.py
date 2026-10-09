@@ -2,12 +2,16 @@ import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
+is_vercel = bool(os.environ.get("VERCEL"))
+default_db = "sqlite:////tmp/defaulter.db" if is_vercel else "sqlite:///./defaulter.db"
+default_upload = "/tmp/uploads" if is_vercel else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     APP_NAME: str = "Court Order & Payment Agreement Defaulter App"
-    DATABASE_URL: str = "sqlite:///./defaulter.db"
-    UPLOAD_DIR: str = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
+    DATABASE_URL: str = default_db
+    UPLOAD_DIR: str = default_upload
     
     # Supabase (optional cloud credentials)
     SUPABASE_URL: Optional[str] = None
@@ -23,4 +27,8 @@ class Settings(BaseSettings):
     DEFAULT_PLAINTIFF_CONTACT: str = "[PLAINTIFF CONTACT]"
 
 settings = Settings()
-os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+try:
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+except OSError:
+    pass

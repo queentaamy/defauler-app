@@ -16,7 +16,9 @@ app = FastAPI(
     title=settings.APP_NAME,
     description="Deterministic legal payment tracking and default calculation engine based on court orders and payment agreements.",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json"
 )
 
 # CORS configuration for Next.js frontend
@@ -48,5 +50,6 @@ def root():
     }
 
 @app.get("/health")
+@app.get("/api/health")
 def health_check():
     return {"status": "healthy"}

@@ -13,14 +13,21 @@ router = APIRouter(prefix="/api/cases", tags=["Cases"])
 
 @router.post("", response_model=CaseDetailResponse)
 def create_case(payload: CaseCreateRequest, db: Session = Depends(get_db)):
+    if not payload.defendant_name or not payload.defendant_name.strip():
+        raise HTTPException(status_code=400, detail="Defendant name is required.")
+    if not payload.case_number or not payload.case_number.strip():
+        raise HTTPException(status_code=400, detail="Case number is required.")
+    if payload.original_amount <= 0:
+        raise HTTPException(status_code=400, detail="Original amount must be greater than 0.")
+
     # 1. Create Case with fixed Plaintiff info from system config
     new_case = Case(
-        case_number=payload.case_number or f"CASE-{datetime.now().strftime('%Y%m%d%H%M')}",
-        court_name=payload.court_name,
+        case_number=payload.case_number.strip(),
+        court_name=payload.court_name.strip() if payload.court_name else None,
         plaintiff_name=settings.DEFAULT_PLAINTIFF_NAME,
         plaintiff_address=settings.DEFAULT_PLAINTIFF_ADDRESS,
         plaintiff_contact=settings.DEFAULT_PLAINTIFF_CONTACT,
-        defendant_name=payload.defendant_name or "Unknown Defendant",
+        defendant_name=payload.defendant_name.strip(),
         defendant_address=payload.defendant_address,
         defendant_contact=payload.defendant_contact,
         status="active"

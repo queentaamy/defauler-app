@@ -171,5 +171,25 @@ NEXT_PUBLIC_DEFAULT_PLAINTIFF_NAME="[PLAINTIFF NAME]"
 
 ---
 
+## Deploying to Vercel (Multi-Service Project)
+
+The project is configured for Vercel multi-service deployment via `vercel.json` in the root:
+- **`backend` service**: FastAPI application in `./backend`
+- **`frontend` service**: Next.js application in `./frontend`
+- **Service Binding**: Vercel injects the backend's internal base URL into the frontend via `BACKEND_URL`.
+- **Top-Level Rewrites**: Public `/api/(.*)` requests route to `backend`, while `/(.*)` requests route to `frontend`.
+
+To test locally with the Vercel CLI:
+```bash
+vercel dev
+```
+
+To deploy to Vercel:
+```bash
+vercel deploy
+```
+
+---
+
 ## License
 MIT

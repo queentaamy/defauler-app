@@ -11,8 +11,9 @@ client = TestClient(app)
 def setup_test_db():
     Base.metadata.create_all(bind=engine)
     yield
-    # Cleanup tables after test run
-    Base.metadata.drop_all(bind=engine)
+    with engine.begin() as conn:
+        for table in reversed(Base.metadata.sorted_tables):
+            conn.execute(table.delete())
 
 def test_health():
     response = client.get("/health")

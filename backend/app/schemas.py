@@ -3,8 +3,8 @@ from typing import Optional, List, Dict, Any
 from datetime import date, datetime
 
 class ExtractedAgreementData(BaseModel):
-    case_number: str = "CASE-2026-001"
-    court_name: Optional[str] = "High Court of Justice"
+    case_number: str = ""
+    court_name: Optional[str] = ""
     
     # Defendant Details
     defendant_name: str = ""
@@ -22,7 +22,7 @@ class ExtractedAgreementData(BaseModel):
     penalty_rate_or_fixed: float = 0.0
     penalty_type: str = "none"  # none, percentage, fixed_fee, per_day
     grace_period_days: int = 0
-    default_conditions: Optional[str] = "Default occurs if payment is more than 7 days late"
+    default_conditions: Optional[str] = ""
     exchange_rate_rule: Optional[str] = ""
     exchange_rate: float = 1.0
     target_currency: Optional[str] = None

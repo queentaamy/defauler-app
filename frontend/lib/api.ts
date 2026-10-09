@@ -1,4 +1,34 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+/**
+ * Resolves the backend base URL dynamically:
+ * - On the server (Next.js server-side, Server Components, Route Handlers):
+ *   Uses `process.env.BACKEND_URL` injected by Vercel via internal service binding.
+ * - On the client (in the browser):
+ *   Uses relative URL (empty string `""`) so calls hit `/api/...` directly,
+ *   which Vercel's top-level rewrite routes to the `backend` service.
+ * - Local standalone development:
+ *   Falls back to `process.env.NEXT_PUBLIC_API_URL` or `http://localhost:8000`.
+ */
+export function getApiBaseUrl(): string {
+  // 1. Server-side in Node / Vercel Serverless Function: read Vercel service binding
+  if (typeof window === "undefined") {
+    if (process.env.BACKEND_URL) {
+      return process.env.BACKEND_URL.replace(/\/$/, "");
+    }
+  }
+
+  // 2. Explicit public override (if configured)
+  if (process.env.NEXT_PUBLIC_API_URL !== undefined && process.env.NEXT_PUBLIC_API_URL !== "") {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
+  }
+
+  // 3. Client-side in browser: relative URL routes through Vercel's public rewrites
+  if (typeof window !== "undefined") {
+    return "";
+  }
+
+  // 4. Local standalone fallback
+  return "http://localhost:8000";
+}
 
 export interface ExtractedAgreementData {
   case_number: string;
@@ -123,7 +153,8 @@ export async function uploadDocument(file: File): Promise<ExtractedAgreementData
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${API_BASE_URL}/api/documents/upload`, {
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}/api/documents/upload`, {
     method: "POST",
     body: formData,
   });
@@ -137,7 +168,8 @@ export async function uploadDocument(file: File): Promise<ExtractedAgreementData
 }
 
 export async function createCase(data: ExtractedAgreementData): Promise<CaseDetail> {
-  const res = await fetch(`${API_BASE_URL}/api/cases`, {
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}/api/cases`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -152,13 +184,15 @@ export async function createCase(data: ExtractedAgreementData): Promise<CaseDeta
 }
 
 export async function getCases(): Promise<CaseDetail[]> {
-  const res = await fetch(`${API_BASE_URL}/api/cases`);
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}/api/cases`);
   if (!res.ok) throw new Error("Failed to fetch cases");
   return res.json();
 }
 
 export async function getCase(id: string): Promise<CaseDetail> {
-  const res = await fetch(`${API_BASE_URL}/api/cases/${id}`);
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}/api/cases/${id}`);
   if (!res.ok) throw new Error("Failed to fetch case details");
   return res.json();
 }
@@ -173,7 +207,8 @@ export async function recordPayment(
     notes?: string;
   }
 ): Promise<CaseDetail> {
-  const res = await fetch(`${API_BASE_URL}/api/payments/${caseId}`, {
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}/api/payments/${caseId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payment),
@@ -188,7 +223,8 @@ export async function recordPayment(
 }
 
 export async function recalculateCase(caseId: string): Promise<CalculationBreakdown> {
-  const res = await fetch(`${API_BASE_URL}/api/calculations/${caseId}/recalculate`, {
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}/api/calculations/${caseId}/recalculate`, {
     method: "POST",
   });
   if (!res.ok) throw new Error("Failed to recalculate case");
@@ -196,7 +232,8 @@ export async function recalculateCase(caseId: string): Promise<CalculationBreakd
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {
-  const res = await fetch(`${API_BASE_URL}/api/dashboard/stats`);
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}/api/dashboard/stats`);
   if (!res.ok) throw new Error("Failed to fetch dashboard metrics");
   return res.json();
 }
