@@ -5,6 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+    color-scheme: light;
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
@@ -40,6 +41,7 @@
 }
 
 .dark {
+    color-scheme: dark;
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.205 0 0);
@@ -129,4 +131,26 @@
   html {
     @apply font-sans;
     }
+  select {
+    color-scheme: light dark;
+  }
+  .dark select,
+  :is(.dark *) select,
+  html.dark select {
+    color-scheme: dark;
+  }
+  select option,
+  select optgroup {
+    background-color: #ffffff;
+    color: #09090b;
+  }
+  .dark select option,
+  .dark select optgroup,
+  :is(.dark *) select option,
+  :is(.dark *) select optgroup,
+  html.dark select option,
+  html.dark select optgroup {
+    background-color: #18181b;
+    color: #f4f4f5;
+  }
 }

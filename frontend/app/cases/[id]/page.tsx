@@ -989,15 +989,15 @@ export default function CaseDetailsPage({ params }: { params: Promise<{ id: stri
                   <Label htmlFor="edit_freq" className="text-[11px]">Payment Frequency</Label>
                   <select
                     id="edit_freq"
-                    className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-xs"
+                    className="w-full h-9 rounded-md border border-input bg-card text-foreground px-3 py-1 text-xs shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
                     value={editFormData.frequency || "monthly"}
                     onChange={(e) => setEditFormData({ ...editFormData, frequency: e.target.value })}
                   >
-                    <option value="monthly">Monthly</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="biweekly">Bi-weekly</option>
-                    <option value="quarterly">Quarterly</option>
-                    <option value="lump_sum">Lump Sum</option>
+                    <option value="monthly" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Monthly</option>
+                    <option value="weekly" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Weekly</option>
+                    <option value="biweekly" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Bi-weekly</option>
+                    <option value="quarterly" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Quarterly</option>
+                    <option value="lump_sum" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Lump Sum</option>
                   </select>
                 </div>
               </div>
@@ -1049,14 +1049,14 @@ export default function CaseDetailsPage({ params }: { params: Promise<{ id: stri
                   <Label htmlFor="edit_pen_type" className="text-[11px]">Penalty Type</Label>
                   <select
                     id="edit_pen_type"
-                    className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-xs"
+                    className="w-full h-9 rounded-md border border-input bg-card text-foreground px-3 py-1 text-xs shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
                     value={editFormData.penalty_type || "percentage"}
                     onChange={(e) => setEditFormData({ ...editFormData, penalty_type: e.target.value })}
                   >
-                    <option value="percentage">Percentage on Arrears (%)</option>
-                    <option value="per_day">Per-Day Penalty</option>
-                    <option value="fixed_fee">Fixed Fee</option>
-                    <option value="none">None</option>
+                    <option value="percentage" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Percentage on Arrears (%)</option>
+                    <option value="per_day" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Per-Day Penalty</option>
+                    <option value="fixed_fee" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Fixed Fee</option>
+                    <option value="none" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">None</option>
                   </select>
                 </div>
                 <div className="space-y-1">

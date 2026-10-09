@@ -553,15 +553,15 @@ export default function UploadAndReviewPage() {
                   </Label>
                   <select
                     id="frequency"
-                    className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                    className="w-full h-9 rounded-md border border-input bg-card text-foreground px-3 py-1 text-sm shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
                     value={formData.frequency}
                     onChange={(e) => handleFieldChange("frequency", e.target.value)}
                   >
-                    <option value="monthly">Monthly</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="biweekly">Bi-weekly</option>
-                    <option value="quarterly">Quarterly</option>
-                    <option value="lump_sum">Lump Sum</option>
+                    <option value="monthly" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Monthly</option>
+                    <option value="weekly" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Weekly</option>
+                    <option value="biweekly" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Bi-weekly</option>
+                    <option value="quarterly" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Quarterly</option>
+                    <option value="lump_sum" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Lump Sum</option>
                   </select>
                 </div>
               </div>
@@ -631,14 +631,14 @@ export default function UploadAndReviewPage() {
                   </Label>
                   <select
                     id="penalty_type"
-                    className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                    className="w-full h-9 rounded-md border border-input bg-card text-foreground px-3 py-1 text-sm shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
                     value={formData.penalty_type}
                     onChange={(e) => handleFieldChange("penalty_type", e.target.value)}
                   >
-                    <option value="percentage">Percentage on Arrears (%)</option>
-                    <option value="per_day">Per-Day Penalty Amount</option>
-                    <option value="fixed_fee">Fixed Penalty Fee</option>
-                    <option value="none">No Penalty Clause</option>
+                    <option value="percentage" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Percentage on Arrears (%)</option>
+                    <option value="per_day" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Per-Day Penalty Amount</option>
+                    <option value="fixed_fee" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Fixed Penalty Fee</option>
+                    <option value="none" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">No Penalty Clause</option>
                   </select>
                 </div>
 
