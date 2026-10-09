@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     
     # Fixed Plaintiff Information (Configurable in system settings/env)
-    DEFAULT_PLAINTIFF_NAME: str = "[PLAINTIFF NAME]"
+    DEFAULT_PLAINTIFF_NAME: str = "Universal Merchant Bank"
     DEFAULT_PLAINTIFF_ADDRESS: str = "[PLAINTIFF ADDRESS]"
     DEFAULT_PLAINTIFF_CONTACT: str = "[PLAINTIFF CONTACT]"
 

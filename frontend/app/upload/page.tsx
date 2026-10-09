@@ -319,7 +319,7 @@ export default function UploadAndReviewPage() {
                   Fixed Plaintiff Configuration
                 </div>
                 <div className="text-sm font-semibold text-foreground mt-0.5">
-                  Plaintiff Name: [PLAINTIFF NAME]
+                  Plaintiff Name: Universal Merchant Bank
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Address: [PLAINTIFF ADDRESS] • Contact: [PLAINTIFF CONTACT]

@@ -58,7 +58,7 @@ export default function Navbar() {
           <div className="hidden sm:flex items-center space-x-2 bg-muted/60 px-3 py-1.5 rounded-full border border-border/50 text-xs">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
             <span className="text-muted-foreground">Plaintiff:</span>
-            <span className="font-semibold text-foreground">[PLAINTIFF NAME]</span>
+            <span className="font-semibold text-foreground">{process.env.NEXT_PUBLIC_DEFAULT_PLAINTIFF_NAME || "Universal Merchant Bank"}</span>
             <Badge variant="outline" className="text-[10px] uppercase font-bold py-0 h-4">
               Fixed
             </Badge>

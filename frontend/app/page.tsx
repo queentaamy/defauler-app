@@ -241,7 +241,7 @@ export default function DashboardPage() {
             <CardContent className="space-y-3 text-xs">
               <div>
                 <span className="text-muted-foreground block font-medium">Plaintiff Entity:</span>
-                <span className="font-semibold text-foreground">[PLAINTIFF NAME]</span>
+                <span className="font-semibold text-foreground">Universal Merchant Bank</span>
               </div>
               <div>
                 <span className="text-muted-foreground block font-medium">Registered Address:</span>

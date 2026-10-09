@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS cases (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     case_number VARCHAR(100) NOT NULL,
     court_name VARCHAR(200),
-    plaintiff_name VARCHAR(200) NOT NULL DEFAULT '[PLAINTIFF NAME]',
+    plaintiff_name VARCHAR(200) NOT NULL DEFAULT 'Universal Merchant Bank',
     plaintiff_address TEXT DEFAULT '[PLAINTIFF ADDRESS]',
     plaintiff_contact VARCHAR(100) DEFAULT '[PLAINTIFF CONTACT]',
     defendant_name VARCHAR(200) NOT NULL,

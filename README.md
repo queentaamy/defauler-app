@@ -10,7 +10,7 @@ An MVP system for monitoring court orders, consent judgments, and settlement agr
    - The AI / OCR layer is **strictly restricted** to extracting unstructured text and terms from documents.
    - The backend calculation engine is **100% deterministic**, executing mathematical formulas without AI hallucination.
 2. **Fixed Plaintiff Information**:
-   - The Plaintiff's details are fixed in the system configuration (`[PLAINTIFF NAME]`, `[PLAINTIFF ADDRESS]`, `[PLAINTIFF CONTACT]`) and automatically bound to every registered case.
+   - The Plaintiff's details are fixed in the system configuration (`Universal Merchant Bank`, `[PLAINTIFF ADDRESS]`, `[PLAINTIFF CONTACT]`) and automatically bound to every registered case.
 3. **Audit Trail**:
    - Every calculation, payment, and recalculation logs an immutable audit trail showing the step-by-step formula trace:
      $$\text{Original Debt} - \text{Payments Made} = \text{Outstanding Principal} + \text{Accrued Interest} + \text{Default Penalties} = \text{Current Amount Owed}$$
@@ -158,7 +158,7 @@ DATABASE_URL="sqlite:///./defaulter.db"
 GEMINI_API_KEY=""
 
 # Fixed Plaintiff Information
-DEFAULT_PLAINTIFF_NAME="[PLAINTIFF NAME]"
+DEFAULT_PLAINTIFF_NAME="Universal Merchant Bank"
 DEFAULT_PLAINTIFF_ADDRESS="[PLAINTIFF ADDRESS]"
 DEFAULT_PLAINTIFF_CONTACT="[PLAINTIFF CONTACT]"
 ```
@@ -166,7 +166,7 @@ DEFAULT_PLAINTIFF_CONTACT="[PLAINTIFF CONTACT]"
 ### Frontend (`frontend/.env.local`)
 ```ini
 NEXT_PUBLIC_API_URL="http://localhost:8000"
-NEXT_PUBLIC_DEFAULT_PLAINTIFF_NAME="[PLAINTIFF NAME]"
+NEXT_PUBLIC_DEFAULT_PLAINTIFF_NAME="Universal Merchant Bank"
 ```
 
 ---

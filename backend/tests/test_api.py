@@ -26,7 +26,7 @@ def test_upload_and_extraction():
     IN THE HIGH COURT OF JUSTICE
     SUIT NO: HC/2026/ACCRA/094
     BETWEEN:
-    [PLAINTIFF NAME] (Plaintiff)
+    Universal Merchant Bank (Plaintiff)
     AND
     Kofi Mensah (Defendant)
     
@@ -79,7 +79,7 @@ def test_full_court_order_lifecycle():
     case_id = case_data["id"]
     
     # Verify fixed Plaintiff info automatically attached
-    assert case_data["plaintiff_name"] == "[PLAINTIFF NAME]"
+    assert case_data["plaintiff_name"] == "Universal Merchant Bank"
     assert case_data["defendant_name"] == "Ama Serwaa"
     assert len(case_data["payment_plans"]) == 3
     assert case_data["status"] == "defaulted" # Because Jan 1, Feb 1, Mar 1 have passed and no payment yet!

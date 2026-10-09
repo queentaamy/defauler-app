@@ -149,12 +149,25 @@ export interface DashboardStats {
   }[];
 }
 
+async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (err: any) {
+    if (err?.name === "TypeError" || err?.message?.toLowerCase().includes("fetch")) {
+      throw new Error(
+        "Unable to connect to the backend server (Failed to fetch). Please ensure the FastAPI backend is running on http://localhost:8000 (run .\\start-backend.ps1)."
+      );
+    }
+    throw err;
+  }
+}
+
 export async function uploadDocument(file: File): Promise<ExtractedAgreementData> {
   const formData = new FormData();
   formData.append("file", file);
 
   const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}/api/documents/upload`, {
+  const res = await safeFetch(`${baseUrl}/api/documents/upload`, {
     method: "POST",
     body: formData,
   });
@@ -169,7 +182,7 @@ export async function uploadDocument(file: File): Promise<ExtractedAgreementData
 
 export async function createCase(data: ExtractedAgreementData): Promise<CaseDetail> {
   const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}/api/cases`, {
+  const res = await safeFetch(`${baseUrl}/api/cases`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -185,14 +198,14 @@ export async function createCase(data: ExtractedAgreementData): Promise<CaseDeta
 
 export async function getCases(): Promise<CaseDetail[]> {
   const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}/api/cases`);
+  const res = await safeFetch(`${baseUrl}/api/cases`);
   if (!res.ok) throw new Error("Failed to fetch cases");
   return res.json();
 }
 
 export async function getCase(id: string): Promise<CaseDetail> {
   const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}/api/cases/${id}`);
+  const res = await safeFetch(`${baseUrl}/api/cases/${id}`);
   if (!res.ok) throw new Error("Failed to fetch case details");
   return res.json();
 }
@@ -208,7 +221,7 @@ export async function recordPayment(
   }
 ): Promise<CaseDetail> {
   const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}/api/payments/${caseId}`, {
+  const res = await safeFetch(`${baseUrl}/api/payments/${caseId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payment),
@@ -224,7 +237,7 @@ export async function recordPayment(
 
 export async function recalculateCase(caseId: string): Promise<CalculationBreakdown> {
   const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}/api/calculations/${caseId}/recalculate`, {
+  const res = await safeFetch(`${baseUrl}/api/calculations/${caseId}/recalculate`, {
     method: "POST",
   });
   if (!res.ok) throw new Error("Failed to recalculate case");
@@ -233,7 +246,7 @@ export async function recalculateCase(caseId: string): Promise<CalculationBreakd
 
 export async function getDashboardStats(): Promise<DashboardStats> {
   const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}/api/dashboard/stats`);
+  const res = await safeFetch(`${baseUrl}/api/dashboard/stats`);
   if (!res.ok) throw new Error("Failed to fetch dashboard metrics");
   return res.json();
 }

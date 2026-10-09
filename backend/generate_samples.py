@@ -10,7 +10,7 @@ doc.add_heading("IN THE HIGH COURT OF JUSTICE", level=1)
 doc.add_heading("COMMERCIAL DIVISION - ACCRA", level=2)
 doc.add_paragraph("SUIT NO: HC/2026/ACCRA/094")
 doc.add_paragraph("BETWEEN:")
-doc.add_paragraph("[PLAINTIFF NAME]                          ... PLAINTIFF")
+doc.add_paragraph("Universal Merchant Bank                  ... PLAINTIFF")
 doc.add_paragraph("AND")
 doc.add_paragraph("KOFI MENSAH                                ... DEFENDANT")
 doc.add_heading("CONSENT ORDER AND PAYMENT TERMS", level=2)
@@ -31,7 +31,7 @@ print("Created sample_documents/sample_court_order.docx")
 sample_text = """IN THE HIGH COURT OF JUSTICE
 SUIT NO: HC/2026/ACCRA/102
 BETWEEN:
-[PLAINTIFF NAME] (Plaintiff)
+Universal Merchant Bank (Plaintiff)
 AND
 Ama Serwaa (Defendant)
 
