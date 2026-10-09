@@ -1,1166 +1,1462 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import React, { useEffect, useState, use } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
-  Scale, 
-  ShieldCheck, 
-  User, 
+  ArrowLeft, 
   Calendar, 
   DollarSign, 
-  Clock, 
   AlertTriangle, 
-  CheckCircle2, 
-  ArrowLeft, 
-  PlusCircle, 
+  CheckCircle, 
+  Clock, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  Archive, 
+  CreditCard, 
+  Scale, 
+  FileCheck2, 
+  TrendingUp, 
+  TrendingDown, 
   RefreshCw, 
-  FileText, 
-  Printer, 
-  Info,
-  Building,
-  CreditCard,
-  Percent,
-  Pencil,
-  TrendingDown,
-  TrendingUp,
+  Globe, 
+  Layers, 
+  History, 
+  CheckCircle2, 
   AlertCircle,
-  HelpCircle,
-  Edit2
+  FileSpreadsheet,
+  Download
 } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogFooter, 
-  DialogHeader, 
-  DialogTitle 
-} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { 
   getCase, 
   recordPayment, 
-  recalculateCase, 
-  updateCase, 
-  updateScheduleItem, 
-  CaseDetail, 
-  AgreementUpdatePayload, 
-  PaymentPlanItem 
+  addCheckpoint, 
+  addInterestTranche, 
+  addFxImpactItem, 
+  deleteCase, 
+  archiveCase, 
+  updateCase,
+  CaseDetail 
 } from "@/lib/api";
 
 export default function CaseDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const unwrappedParams = use(params);
   const caseId = unwrappedParams.id;
+  const router = useRouter();
 
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"schedule" | "gains_losses" | "payments" | "breakdown" | "agreement">("schedule");
 
-  // Payment Modal State
-  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  // As-of evaluation date state (default today)
+  const [asOfDate, setAsOfDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [isEditingAsOfDate, setIsEditingAsOfDate] = useState(false);
+  const [tempAsOfDate, setTempAsOfDate] = useState<string>(new Date().toISOString().split("T")[0]);
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<"settlement" | "ledger" | "tranches" | "fx" | "payments" | "legacy_schedule">("settlement");
+  const [showAllLedgerMonths, setShowAllLedgerMonths] = useState(false);
+
+  // Modals
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState<string>("");
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [paymentRef, setPaymentRef] = useState<string>("");
   const [paymentNotes, setPaymentNotes] = useState<string>("");
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
-  const [isRecalculating, setIsRecalculating] = useState(false);
 
-  // Edit Terms Modal State
-  const [isEditTermsOpen, setIsEditTermsOpen] = useState(false);
-  const [isSavingTerms, setIsSavingTerms] = useState(false);
-  const [editFormData, setEditFormData] = useState<AgreementUpdatePayload>({});
+  // Checkpoint modal
+  const [isCheckpointModalOpen, setIsCheckpointModalOpen] = useState(false);
+  const [cpDueDate, setCpDueDate] = useState<string>("");
+  const [cpCumulative, setCpCumulative] = useState<string>("");
+  const [cpAmount, setCpAmount] = useState<string>("");
+  const [cpNotes, setCpNotes] = useState<string>("");
+  const [isSubmittingCp, setIsSubmittingCp] = useState(false);
 
-  // Edit Individual Instalment Modal State
-  const [editingInstalment, setEditingInstalment] = useState<PaymentPlanItem | null>(null);
-  const [editInstalmentDate, setEditInstalmentDate] = useState<string>("");
-  const [editInstalmentAmount, setEditInstalmentAmount] = useState<string>("");
-  const [editInstalmentNotes, setEditInstalmentNotes] = useState<string>("");
-  const [isSavingInstalment, setIsSavingInstalment] = useState(false);
+  // Tranche modal
+  const [isTrancheModalOpen, setIsTrancheModalOpen] = useState(false);
+  const [trancheEffDate, setTrancheEffDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [trancheBase, setTrancheBase] = useState<string>("14.20");
+  const [trancheSpread, setTrancheSpread] = useState<string>("2.00");
+  const [tranchePenal, setTranchePenal] = useState<string>("0.00");
+  const [trancheNotes, setTrancheNotes] = useState<string>("");
+  const [isSubmittingTranche, setIsSubmittingTranche] = useState(false);
 
-  const loadCase = async () => {
+  // FX Impact modal
+  const [isFxModalOpen, setIsFxModalOpen] = useState(false);
+  const [fxDueDate, setFxDueDate] = useState<string>("");
+  const [fxAmount, setFxAmount] = useState<string>("");
+  const [fxPaymentDate, setFxPaymentDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [fxDueRate, setFxDueRate] = useState<string>("");
+  const [fxActualRate, setFxActualRate] = useState<string>("");
+  const [fxLocalCurr, setFxLocalCurr] = useState<string>("GHS");
+  const [fxNotes, setFxNotes] = useState<string>("");
+  const [isSubmittingFx, setIsSubmittingFx] = useState(false);
+
+  // Load account
+  const loadAccount = async (targetDate?: string) => {
     try {
       setLoading(true);
-      const data = await getCase(caseId);
+      const evalDate = targetDate !== undefined ? targetDate : asOfDate;
+      const data = await getCase(caseId, evalDate);
       setCaseData(data);
-      if (data.agreement && !paymentAmount) {
-        setPaymentAmount(data.agreement.payment_amount.toString());
+      
+      // Auto-set tab based on account type
+      if (data.account_type === "judgment_debt") {
+        setActiveTab("ledger");
+      } else {
+        setActiveTab("settlement");
       }
     } catch (err: any) {
-      setError(err.message || "Failed to load case");
+      setError(err?.message || "Failed to load account details");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadCase();
+    loadAccount();
   }, [caseId]);
 
-  const handleOpenEditTerms = () => {
-    if (!caseData || !caseData.agreement) return;
-    const agr = caseData.agreement;
-    setEditFormData({
-      defendant_name: caseData.defendant_name,
-      defendant_address: caseData.defendant_address || "",
-      defendant_contact: caseData.defendant_contact || "",
-      case_number: caseData.case_number,
-      court_name: caseData.court_name || "",
-      original_amount: agr.original_amount,
-      currency: agr.currency,
-      payment_amount: agr.payment_amount,
-      frequency: agr.frequency,
-      start_date: agr.start_date,
-      instalments_count: agr.instalments_count,
-      interest_rate: agr.interest_rate,
-      penalty_rate_or_fixed: agr.penalty_rate_or_fixed,
-      penalty_type: agr.penalty_type,
-      grace_period_days: agr.grace_period_days,
-      default_conditions: agr.default_conditions || "",
-      regenerate_schedule: false,
-    });
-    setIsEditTermsOpen(true);
+  const handleApplyAsOfDate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAsOfDate(tempAsOfDate);
+    setIsEditingAsOfDate(false);
+    await loadAccount(tempAsOfDate);
   };
 
-  const handleSaveTermsSubmit = async (e: React.FormEvent) => {
+  // Record payment
+  const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!caseData) return;
-    setIsSavingTerms(true);
-    try {
-      const updated = await updateCase(caseId, editFormData);
-      setCaseData(updated);
-      setIsEditTermsOpen(false);
-    } catch (err: any) {
-      alert(err.message || "Failed to update agreement terms");
-    } finally {
-      setIsSavingTerms(false);
+    const amt = parseFloat(paymentAmount);
+    if (isNaN(amt) || amt <= 0) {
+      alert("Please enter a valid payment amount greater than zero.");
+      return;
     }
-  };
-
-  const handleOpenEditInstalment = (item: PaymentPlanItem) => {
-    setEditingInstalment(item);
-    setEditInstalmentDate(item.due_date);
-    setEditInstalmentAmount(item.amount_due.toString());
-    setEditInstalmentNotes(item.notes || "");
-  };
-
-  const handleSaveInstalmentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingInstalment || !caseData) return;
-    setIsSavingInstalment(true);
-    try {
-      const updated = await updateScheduleItem(caseId, editingInstalment.id, {
-        due_date: editInstalmentDate,
-        amount_due: parseFloat(editInstalmentAmount),
-        notes: editInstalmentNotes || undefined,
-      });
-      setCaseData(updated);
-      setEditingInstalment(null);
-    } catch (err: any) {
-      alert(err.message || "Failed to update instalment");
-    } finally {
-      setIsSavingInstalment(false);
-    }
-  };
-
-  const handleRecordPaymentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!caseData) return;
-
     setIsSubmittingPayment(true);
     try {
       const updated = await recordPayment(caseId, {
-        amount: parseFloat(paymentAmount),
+        amount: amt,
         payment_date: paymentDate,
-        currency: caseData.agreement?.currency || "USD",
-        payment_reference: paymentRef,
-        notes: paymentNotes || undefined,
+        currency: caseData?.currency || "USD",
+        payment_reference: paymentRef.trim() || `RCPT-${Date.now().toString().slice(-6)}`,
+        notes: paymentNotes.trim() || undefined,
       });
       setCaseData(updated);
-      setIsPaymentOpen(false);
+      setIsPaymentModalOpen(false);
+      setPaymentAmount("");
       setPaymentRef("");
       setPaymentNotes("");
+      await loadAccount(asOfDate);
     } catch (err: any) {
-      alert(err.message || "Failed to record payment");
+      alert(err?.message || "Failed to record payment");
     } finally {
       setIsSubmittingPayment(false);
     }
   };
 
-  const handleRecalculate = async () => {
-    setIsRecalculating(true);
+  // Add Checkpoint
+  const handleCheckpointSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cum = parseFloat(cpCumulative);
+    if (isNaN(cum) || cum <= 0) {
+      alert("Please enter a valid cumulative milestone target.");
+      return;
+    }
+    setIsSubmittingCp(true);
     try {
-      await recalculateCase(caseId);
-      await loadCase();
+      const updated = await addCheckpoint(caseId, {
+        due_date: cpDueDate,
+        cumulative_required: cum,
+        amount_required: parseFloat(cpAmount) || 0,
+        notes: cpNotes.trim() || undefined,
+      });
+      setCaseData(updated);
+      setIsCheckpointModalOpen(false);
+      setCpCumulative("");
+      setCpAmount("");
+      setCpNotes("");
+      await loadAccount(asOfDate);
     } catch (err: any) {
-      alert(err.message || "Failed to recalculate balance");
+      alert(err?.message || "Failed to add milestone checkpoint");
     } finally {
-      setIsRecalculating(false);
+      setIsSubmittingCp(false);
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "defaulted":
-        return <Badge variant="destructive" className="capitalize font-bold">Defaulted</Badge>;
-      case "overdue":
-        return <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-200 capitalize font-bold">Overdue</Badge>;
-      case "settled":
-        return <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 capitalize font-bold">Settled</Badge>;
-      case "partially_paid":
-        return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 capitalize font-bold">Partially Paid</Badge>;
-      case "paid":
-        return <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 border-emerald-200 capitalize font-bold">Paid</Badge>;
-      default:
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 capitalize font-medium">Upcoming</Badge>;
+  // Add Tranche
+  const handleTrancheSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmittingTranche(true);
+    try {
+      const updated = await addInterestTranche(caseId, {
+        effective_from: trancheEffDate,
+        base_rate: parseFloat(trancheBase) || 0,
+        spread: parseFloat(trancheSpread) || 0,
+        penal_rate: parseFloat(tranchePenal) || 0,
+        notes: trancheNotes.trim() || undefined,
+      });
+      setCaseData(updated);
+      setIsTrancheModalOpen(false);
+      setTrancheNotes("");
+      await loadAccount(asOfDate);
+    } catch (err: any) {
+      alert(err?.message || "Failed to add rate tranche");
+    } finally {
+      setIsSubmittingTranche(false);
     }
   };
 
-  if (loading) {
+  // Add FX Item
+  const handleFxSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseFloat(fxAmount);
+    const dRate = parseFloat(fxDueRate);
+    const aRate = parseFloat(fxActualRate);
+    if (isNaN(amt) || isNaN(dRate) || isNaN(aRate)) {
+      alert("Please provide valid numbers for amount and FX conversion rates.");
+      return;
+    }
+    setIsSubmittingFx(true);
+    try {
+      const updated = await addFxImpactItem(caseId, {
+        obligation_due_date: fxDueDate,
+        amount_contract_curr: amt,
+        payment_date: fxPaymentDate,
+        due_date_rate: dRate,
+        actual_payment_rate: aRate,
+        local_currency: fxLocalCurr,
+        notes: fxNotes.trim() || undefined,
+      });
+      setCaseData(updated);
+      setIsFxModalOpen(false);
+      setFxAmount("");
+      setFxDueRate("");
+      setFxActualRate("");
+      setFxNotes("");
+      await loadAccount(asOfDate);
+    } catch (err: any) {
+      alert(err?.message || "Failed to record FX impact item");
+    } finally {
+      setIsSubmittingFx(false);
+    }
+  };
+
+  // Archive & Delete
+  const handleArchive = async () => {
+    if (!confirm(`Are you sure you want to ${caseData?.is_archived ? "unarchive" : "archive"} this account?`)) return;
+    try {
+      await archiveCase(caseId);
+      await loadAccount(asOfDate);
+    } catch (err: any) {
+      alert("Failed to update archive status: " + err?.message);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to PERMANENTLY DELETE this account and all associated records? This cannot be undone.")) return;
+    try {
+      await deleteCase(caseId);
+      router.push("/cases");
+    } catch (err: any) {
+      alert("Failed to delete account: " + err?.message);
+    }
+  };
+
+  if (loading && !caseData) {
     return (
-      <div className="py-24 text-center space-y-3">
-        <div className="text-base font-semibold">Loading Defendant Account...</div>
-        <div className="text-xs text-muted-foreground">Evaluating schedule, default status, and gains/losses...</div>
+      <div className="p-16 text-center text-slate-400">
+        <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-slate-500" />
+        <p className="text-sm">Loading legal recovery account data...</p>
       </div>
     );
   }
 
   if (error || !caseData) {
     return (
-      <div className="py-24 text-center space-y-4">
-        <AlertTriangle className="w-10 h-10 text-destructive mx-auto" />
-        <div className="text-base font-bold text-destructive">{error || "Account not found"}</div>
-        <Link href="/cases" className={buttonVariants({ variant: "outline" })}>
-          Back to Accounts Directory
+      <div className="p-8 max-w-lg mx-auto text-center space-y-4">
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-rose-700 dark:text-rose-300 text-sm">
+          <AlertCircle className="w-6 h-6 mx-auto mb-2" />
+          <p className="font-semibold">{error || "Account not found."}</p>
+        </div>
+        <Link href="/cases">
+          <Button variant="outline" size="sm">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Accounts
+          </Button>
         </Link>
       </div>
     );
   }
 
-  const calc = caseData.latest_calculation;
-  const agr = caseData.agreement;
-  const gnl = caseData.gains_and_losses;
+  const isSettlement = caseData.account_type === "settlement";
+  const isBreached = caseData.settlement_evaluation?.is_breached ?? caseData.is_breached;
+  const evalData = caseData.settlement_evaluation;
+  const ledgerData = caseData.monthly_ledger;
+
+  // Format date helper (e.g. 14 Feb 2025)
+  const formatPrettyDate = (dStr?: string) => {
+    if (!dStr) return "";
+    try {
+      const d = new Date(dStr + "T00:00:00");
+      return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    } catch {
+      return dStr;
+    }
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Top Header & Quick Actions Bar */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b pb-4">
-        <div>
-          <div className="flex items-center space-x-2 text-xs text-muted-foreground mb-1">
-            <Link href="/cases" className="hover:underline flex items-center gap-1 font-medium">
-              <ArrowLeft className="w-3 h-3" />
-              <span>Accounts Directory</span>
-            </Link>
-            <span>/</span>
-            <span className="font-mono text-foreground font-semibold">{caseData.case_number}</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-extrabold tracking-tight font-heading text-foreground">
-              Defendant: {caseData.defendant_name}
-            </h1>
-            {getStatusBadge(caseData.status)}
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Account Ref: <span className="font-mono font-semibold text-foreground">{caseData.case_number}</span>
-            {caseData.court_name ? ` • ${caseData.court_name}` : " • Terms of Settlement Agreement"}
-            {caseData.defendant_contact ? ` • Tel: ${caseData.defendant_contact}` : ""}
-          </p>
+    <div className="space-y-6 pb-20">
+      {/* Top Breadcrumb & Action bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center space-x-3 text-sm text-slate-500">
+          <Link
+            href={isSettlement ? "/settlements" : "/cases"}
+            className="inline-flex items-center space-x-1.5 hover:text-slate-900 dark:hover:text-slate-100 font-medium transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to {isSettlement ? "settlement accounts" : "accounts"}</span>
+          </Link>
+          <span>/</span>
+          <span className="font-bold text-slate-800 dark:text-slate-200">{caseData.defendant_name}</span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Modify Terms Button */}
+        {/* As-Of Evaluation Date Widget */}
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 px-3 py-1.5 rounded-lg shadow-xs text-xs">
+            <Calendar className="w-3.5 h-3.5 text-slate-500" />
+            <span className="text-slate-500">Calculate as at:</span>
+            {isEditingAsOfDate ? (
+              <form onSubmit={handleApplyAsOfDate} className="flex items-center space-x-1.5">
+                <input
+                  type="date"
+                  value={tempAsOfDate}
+                  onChange={(e) => setTempAsOfDate(e.target.value)}
+                  className="border border-slate-300 dark:border-slate-700 rounded px-1.5 py-0.5 text-xs bg-background text-foreground"
+                />
+                <button
+                  type="submit"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-0.5 rounded text-[11px] font-bold"
+                >
+                  Apply
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingAsOfDate(false)}
+                  className="text-slate-400 hover:text-slate-600 text-[11px]"
+                >
+                  ✕
+                </button>
+              </form>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <span className="font-bold text-slate-900 dark:text-slate-100">
+                  {formatPrettyDate(asOfDate)}
+                </span>
+                <button
+                  onClick={() => {
+                    setTempAsOfDate(asOfDate);
+                    setIsEditingAsOfDate(true);
+                  }}
+                  className="text-emerald-600 hover:text-emerald-700 text-xs font-semibold flex items-center space-x-0.5"
+                >
+                  <Edit3 className="w-3 h-3" />
+                  <span>Edit</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           <Button
-            variant="outline"
-            size="sm"
-            onClick={handleOpenEditTerms}
-            className="gap-1.5 text-xs font-semibold"
+            onClick={() => setIsPaymentModalOpen(true)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center space-x-1.5 text-xs h-8 px-3 shadow-xs"
           >
-            <Pencil className="w-3.5 h-3.5 text-primary" />
-            <span>Modify Terms</span>
-          </Button>
-
-          {/* Recalculate Button */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRecalculate}
-            disabled={isRecalculating}
-            className="gap-1.5 text-xs"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRecalculating ? "animate-spin" : ""}`} />
-            <span>Recalculate</span>
-          </Button>
-
-          {/* Audit Report Button */}
-          <Link href={`/cases/${caseData.id}/report`} className={buttonVariants({ variant: "outline", size: "sm", className: "gap-1.5 text-xs" })}>
-            <Printer className="w-3.5 h-3.5" />
-            <span>Report</span>
-          </Link>
-
-          {/* Record Payment Button */}
-          <Button 
-            size="sm" 
-            onClick={() => setIsPaymentOpen(true)}
-            className="gap-1.5 text-xs font-bold shadow-xs"
-          >
-            <PlusCircle className="w-3.5 h-3.5" />
+            <CreditCard className="w-3.5 h-3.5" />
             <span>Record Payment</span>
           </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleArchive}
+            title={caseData.is_archived ? "Unarchive account" : "Archive account"}
+            className="h-8 text-xs text-slate-500"
+          >
+            <Archive className="w-3.5 h-3.5" />
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDelete}
+            title="Delete account permanently"
+            className="h-8 text-xs text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
         </div>
       </div>
 
-      {/* Financial Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-        {/* Total Amount Owed */}
-        <Card className="shadow-xs border-primary/30 bg-primary/5">
-          <CardHeader className="pb-1">
-            <CardTitle className="text-xs font-semibold uppercase text-primary">
-              Total Enforceable Debt
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-black text-foreground">
-              {agr?.currency} {(calc?.total_amount_owed ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Principal + Default Penalties + Interest
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Outstanding Principal */}
-        <Card className="shadow-xs">
-          <CardHeader className="pb-1">
-            <CardTitle className="text-xs font-semibold uppercase text-muted-foreground">
-              Outstanding Principal
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">
-              {agr?.currency} {(calc?.outstanding_principal ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Total agreed: {agr?.currency} {(agr?.original_amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Total Paid */}
-        <Card className="shadow-xs">
-          <CardHeader className="pb-1">
-            <CardTitle className="text-xs font-semibold uppercase text-muted-foreground">
-              Total Recovered
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-              {agr?.currency} {(calc?.total_paid ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Across {caseData.payments.length} payment(s)
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Cash Shortfall */}
-        <Card className={`shadow-xs ${gnl && gnl.cash_flow_shortfall > 0 ? "border-amber-500/30 bg-amber-500/5" : ""}`}>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-xs font-semibold uppercase text-amber-600 dark:text-amber-400">
-              Cash Flow Loss (Shortfall)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-              {agr?.currency} {(gnl?.cash_flow_shortfall ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Expected to date: {agr?.currency} {(gnl?.total_expected_to_date ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Accrued Penalties & Gains */}
-        <Card className="shadow-xs">
-          <CardHeader className="pb-1">
-            <CardTitle className="text-xs font-semibold uppercase text-destructive">
-              Default Penalties & Interest
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-destructive">
-              {agr?.currency} {(gnl?.total_creditor_gains ?? ((calc?.accrued_interest ?? 0) + (calc?.default_interest_or_penalty ?? 0))).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Penalties: ${calc?.default_interest_or_penalty.toFixed(2)} • Interest: ${calc?.accrued_interest.toFixed(2)}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Tabs Navigation */}
-      <div className="space-y-4">
-        <div className="flex flex-wrap border-b gap-x-6 gap-y-2 text-sm font-medium">
-          <button
-            onClick={() => setActiveTab("schedule")}
-            className={`pb-2.5 transition-colors border-b-2 font-semibold flex items-center gap-1.5 ${
-              activeTab === "schedule"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Calendar className="w-4 h-4" />
-            <span>Payment Schedule ({caseData.payment_plans.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("gains_losses")}
-            className={`pb-2.5 transition-colors border-b-2 font-semibold flex items-center gap-1.5 ${
-              activeTab === "gains_losses"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <TrendingDown className="w-4 h-4 text-amber-500" />
-            <span>Gains & Losses / Default Impact</span>
-            {gnl && gnl.has_defaulted && (
-              <Badge variant="destructive" className="text-[10px] py-0 px-1.5 h-4 ml-1">
-                Default
-              </Badge>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab("payments")}
-            className={`pb-2.5 transition-colors border-b-2 font-semibold flex items-center gap-1.5 ${
-              activeTab === "payments"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <CreditCard className="w-4 h-4" />
-            <span>Payment History ({caseData.payments.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("breakdown")}
-            className={`pb-2.5 transition-colors border-b-2 font-semibold flex items-center gap-1.5 ${
-              activeTab === "breakdown"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>Calculation Audit</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("agreement")}
-            className={`pb-2.5 transition-colors border-b-2 font-semibold flex items-center gap-1.5 ${
-              activeTab === "agreement"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span>Agreement Terms</span>
-          </button>
-        </div>
-
-        {/* TAB 1: Payment Schedule */}
-        {activeTab === "schedule" && (
-          <Card className="shadow-xs">
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base font-bold">Enforceable Payment Schedule</CardTitle>
-                <CardDescription className="text-xs">
-                  Instalments are evaluated sequentially. You can click "Edit" on any instalment to customize dates or amounts.
-                </CardDescription>
-              </div>
-              <Button variant="outline" size="sm" onClick={handleOpenEditTerms} className="gap-1.5 text-xs">
-                <Pencil className="w-3.5 h-3.5" />
-                <span>Adjust All Terms</span>
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-16">#</TableHead>
-                      <TableHead>Due Date</TableHead>
-                      <TableHead className="text-right">Amount Due</TableHead>
-                      <TableHead className="text-right">Amount Paid</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Paid Date</TableHead>
-                      <TableHead>Notes</TableHead>
-                      <TableHead className="w-16 text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {caseData.payment_plans.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-semibold text-xs">#{item.instalment_number}</TableCell>
-                        <TableCell className="text-xs font-mono">{item.due_date}</TableCell>
-                        <TableCell className="text-right font-mono text-xs font-medium">
-                          {agr?.currency} {item.amount_due.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                          {agr?.currency} {item.amount_paid.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell>{getStatusBadge(item.status)}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground font-mono">
-                          {item.paid_date || "—"}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-xs truncate">
-                          {item.notes || "—"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleOpenEditInstalment(item)}
-                            className="h-7 px-2 text-xs"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                            <span className="sr-only">Edit</span>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* TAB 2: Gains & Losses / Default Impact */}
-        {activeTab === "gains_losses" && gnl && (
-          <div className="space-y-4">
-            {/* Status Announcement Banner */}
-            <div className={`p-4 rounded-xl border flex items-start gap-3.5 ${
-              gnl.has_defaulted
-                ? "bg-destructive/10 border-destructive/30 text-destructive"
-                : gnl.overdue_periods_count > 0
-                ? "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300"
-                : "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300"
-            }`}>
-              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <h4 className="font-bold text-sm">Default Engine Status</h4>
-                <p className="text-xs leading-relaxed font-medium">{gnl.default_clause_status}</p>
-              </div>
-            </div>
-
-            {/* Financial Gains vs Losses Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Creditor Financial Impact */}
-              <Card className="shadow-xs">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-bold flex items-center gap-2">
-                      <TrendingDown className="w-4 h-4 text-amber-500" />
-                      <span>Creditor Impact (Cash Flow Loss vs Penalties)</span>
-                    </CardTitle>
-                    <Badge variant="outline" className="text-[10px]">Creditor View</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2.5 text-xs">
-                  <div className="flex justify-between py-1 border-b">
-                    <span className="text-muted-foreground">Expected Inflow to Date:</span>
-                    <span className="font-mono font-semibold">{gnl.currency} {gnl.total_expected_to_date.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b">
-                    <span className="text-muted-foreground">Actual Cash Received to Date:</span>
-                    <span className="font-mono font-bold text-emerald-600">-{gnl.currency} {gnl.total_paid_to_date.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b">
-                    <span className="font-semibold text-amber-600">Unrecovered Cash Flow (Loss for period):</span>
-                    <span className="font-mono font-bold text-amber-600">{gnl.currency} {gnl.cash_flow_shortfall.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b">
-                    <span className="text-muted-foreground">Additional Gains from Default Penalty:</span>
-                    <span className="font-mono font-bold text-primary">+{gnl.currency} {gnl.total_default_penalties.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between py-1">
-                    <span className="text-muted-foreground">Compensatory Interest Accrued:</span>
-                    <span className="font-mono font-bold text-primary">+{gnl.currency} {gnl.total_accrued_interest.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Debtor / Defendant Penalty Loss */}
-              <Card className="shadow-xs">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-bold flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-destructive" />
-                      <span>Defendant Additional Cost (Avoidable Default Losses)</span>
-                    </CardTitle>
-                    <Badge variant="outline" className="text-[10px]">Debtor Liability</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2.5 text-xs">
-                  <div className="flex justify-between py-1 border-b">
-                    <span className="text-muted-foreground">Original Agreed Principal:</span>
-                    <span className="font-mono font-semibold">{gnl.currency} {gnl.total_agreed.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b">
-                    <span className="text-muted-foreground">Remaining Principal Owed:</span>
-                    <span className="font-mono font-semibold">{gnl.currency} {gnl.unpaid_principal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b">
-                    <span className="font-semibold text-destructive">Extra Cost Incurred from Non-Payment:</span>
-                    <span className="font-mono font-bold text-destructive">+{gnl.currency} {gnl.total_debtor_penalty_loss.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b">
-                    <span className="text-muted-foreground">Defaulted Periods Count:</span>
-                    <span className="font-semibold">{gnl.defaulted_periods_count} of {gnl.periods.length} instalments</span>
-                  </div>
-                  <div className="flex justify-between py-1 font-bold">
-                    <span>Total Claim Enforceable Today:</span>
-                    <span className="font-mono text-base text-foreground">{gnl.currency} {gnl.total_current_owed.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Period-by-Period Default Analysis Table */}
-            <Card className="shadow-xs">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-bold">Period-by-Period Default Breakdown</CardTitle>
-                <CardDescription className="text-xs">
-                  Detailed analysis of each period showing missed cash flows, days overdue, interest, and triggered penalties.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-16">Instalment</TableHead>
-                        <TableHead>Due Date</TableHead>
-                        <TableHead className="text-right">Agreed Due</TableHead>
-                        <TableHead className="text-right">Paid</TableHead>
-                        <TableHead className="text-right">Cash Loss (Shortfall)</TableHead>
-                        <TableHead>Overdue Days</TableHead>
-                        <TableHead>Period Status</TableHead>
-                        <TableHead className="text-right">Interest</TableHead>
-                        <TableHead className="text-right">Penalty</TableHead>
-                        <TableHead className="text-right">Total Owed</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {gnl.periods.map((p) => (
-                        <TableRow key={p.instalment_number} className={p.is_defaulted ? "bg-destructive/5" : ""}>
-                          <TableCell className="font-semibold text-xs">#{p.instalment_number}</TableCell>
-                          <TableCell className="text-xs font-mono">{p.due_date}</TableCell>
-                          <TableCell className="text-right font-mono text-xs font-medium">
-                            {gnl.currency} {p.amount_due.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                            {gnl.currency} {p.amount_paid.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-xs font-bold text-amber-600">
-                            {p.shortfall > 0 ? `${gnl.currency} ${p.shortfall.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "—"}
-                          </TableCell>
-                          <TableCell className="text-xs font-mono">
-                            {p.days_overdue > 0 ? `${p.days_overdue} days` : "0"}
-                          </TableCell>
-                          <TableCell>{getStatusBadge(p.status)}</TableCell>
-                          <TableCell className="text-right font-mono text-xs text-primary">
-                            {p.period_interest > 0 ? `+${p.period_interest.toFixed(2)}` : "—"}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-xs font-bold text-destructive">
-                            {p.period_penalty > 0 ? `+${p.period_penalty.toFixed(2)}` : "—"}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-xs font-black text-foreground">
-                            {gnl.currency} {p.period_total_owed.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+      {/* Account Header Card */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center space-x-3">
+            <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100">
+              {caseData.defendant_name}
+            </h1>
+            <Badge
+              variant="outline"
+              className={`text-xs uppercase font-bold py-0.5 px-2 ${
+                isSettlement
+                  ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10"
+                  : "border-blue-500/40 text-blue-700 dark:text-blue-400 bg-blue-500/10"
+              }`}
+            >
+              {isSettlement ? "Settlement Account" : "Judgment Debt Court Order"}
+            </Badge>
           </div>
-        )}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-slate-500">
+            <span>Suit Ref: <strong className="text-slate-700 dark:text-slate-300">{caseData.case_number || "Pending"}</strong></span>
+            <span>•</span>
+            <span>Court: <strong className="text-slate-700 dark:text-slate-300">{caseData.court_name || "Commercial Court"}</strong></span>
+            <span>•</span>
+            <span>Creditor: <strong className="text-slate-700 dark:text-slate-300">{caseData.plaintiff_name}</strong></span>
+          </div>
+        </div>
 
-        {/* TAB 3: Payment History */}
-        {activeTab === "payments" && (
-          <Card className="shadow-xs">
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base font-bold">Recorded Payment Records</CardTitle>
-                <CardDescription className="text-xs">
-                  Chronological payment transactions logged for this defendant.
-                </CardDescription>
-              </div>
-              <Button size="sm" onClick={() => setIsPaymentOpen(true)} className="gap-1.5 text-xs">
-                <PlusCircle className="w-3.5 h-3.5" />
-                <span>Add Payment</span>
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {caseData.payments.length === 0 ? (
-                <div className="py-12 text-center text-xs text-muted-foreground space-y-2">
-                  <CreditCard className="w-8 h-8 mx-auto text-muted-foreground/50" />
-                  <p>No payments recorded yet. Click "Add Payment" to record a payment.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date Paid</TableHead>
-                        <TableHead>Reference / Transaction</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead>Notes</TableHead>
-                        <TableHead>Logged At</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {caseData.payments.map((p) => (
-                        <TableRow key={p.id}>
-                          <TableCell className="font-mono text-xs">{p.payment_date}</TableCell>
-                          <TableCell className="font-mono text-xs font-bold text-primary">
-                            {p.payment_reference}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                            {p.currency} {p.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{p.notes || "—"}</TableCell>
-                          <TableCell className="text-[11px] text-muted-foreground">{p.created_at.split("T")[0]}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+        <div className="flex items-center space-x-3">
+          <div className="text-right">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+              Contract Currency
+            </span>
+            <span className="text-xl font-black text-slate-900 dark:text-slate-100">
+              {caseData.currency}
+            </span>
+          </div>
+        </div>
+      </div>
 
-        {/* TAB 4: Deterministic Calculation Breakdown */}
-        {activeTab === "breakdown" && calc && (
-          <Card className="shadow-xs">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base font-bold">Mathematical Audit Trail</CardTitle>
-                  <CardDescription className="text-xs">
-                    Deterministic calculation engine step-by-step verification log.
-                  </CardDescription>
+      {/* ========================================================================= */}
+      {/* SETTLEMENT ACCOUNT VIEW (Images 2, 3, 4, 5) */}
+      {/* ========================================================================= */}
+      {isSettlement && (
+        <div className="space-y-6">
+          {/* Dynamic Status Banner (Image 2 vs Image 5) */}
+          {isBreached ? (
+            /* RED BANNER: SETTLEMENT BREACHED (Image 2) */
+            <div className="bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-300 dark:border-rose-900/60 rounded-xl p-5 shadow-xs">
+              <div className="flex items-start space-x-3">
+                <div className="w-8 h-8 rounded-full bg-rose-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                  <AlertTriangle className="w-4 h-4" />
                 </div>
-                <Link href={`/cases/${caseData.id}/report`} className={buttonVariants({ variant: "outline", size: "sm", className: "gap-1.5 text-xs" })}>
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>View Printable Report</span>
-                </Link>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="bg-muted/40 p-4 rounded-lg font-mono text-xs space-y-2 border">
-                {calc.step_by_step_log.map((step, idx) => (
-                  <div key={idx} className="flex items-start gap-2">
-                    <span className="text-muted-foreground select-none">[{idx + 1}]</span>
-                    <span className={idx === calc.step_by_step_log.length - 1 ? "font-bold text-primary" : ""}>
-                      {step}
+                <div className="flex-1">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <h2 className="text-base font-black text-rose-900 dark:text-rose-200 tracking-wide uppercase">
+                      SETTLEMENT BREACHED
+                    </h2>
+                    <span className="text-xs font-semibold text-rose-700 dark:text-rose-300">
+                      Evaluated as at {formatPrettyDate(asOfDate)}
                     </span>
                   </div>
-                ))}
-              </div>
+                  <p className="text-xs text-rose-800 dark:text-rose-300 mt-1">
+                    Settlement terms breached. The discounted settlement agreement is revoked and the full reinstated debt is currently due with interest.
+                  </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div className="p-3 border rounded-md space-y-1">
-                  <div className="text-muted-foreground">Original Order Amount:</div>
-                  <div className="font-bold text-sm">{calc.currency} {calc.original_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                </div>
-                <div className="p-3 border rounded-md space-y-1">
-                  <div className="text-muted-foreground">Less Total Payments:</div>
-                  <div className="font-bold text-sm text-emerald-600">-{calc.currency} {calc.total_paid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                </div>
-                <div className="p-3 border rounded-md space-y-1">
-                  <div className="text-muted-foreground">Outstanding Principal:</div>
-                  <div className="font-bold text-sm">{calc.currency} {calc.outstanding_principal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                </div>
-                <div className="p-3 border rounded-md space-y-1">
-                  <div className="text-muted-foreground">Accrued Interest + Default Penalty:</div>
-                  <div className="font-bold text-sm text-amber-600">+{calc.currency} {(calc.accrued_interest + calc.default_interest_or_penalty).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                  {/* Banner Key Figures Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 pt-3 border-t border-rose-200 dark:border-rose-900/60">
+                    <div>
+                      <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wider block">
+                        Reinstated Amount Due
+                      </span>
+                      <span className="text-2xl font-black text-rose-950 dark:text-rose-100">
+                        {caseData.currency} {(evalData?.reinstated_amount_due ?? (caseData.reinstatement_amount || 0)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
 
-        {/* TAB 5: Extracted Agreement Terms */}
-        {activeTab === "agreement" && agr && (
-          <Card className="shadow-xs">
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base font-bold">Agreed Terms & Conditions</CardTitle>
-                <CardDescription className="text-xs">
-                  Parameters extracted from: {agr.document_name || "Terms of Settlement"}
-                </CardDescription>
+                    <div>
+                      <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wider block">
+                        Total Paid to Date
+                      </span>
+                      <span className="text-2xl font-black text-slate-800 dark:text-slate-200">
+                        {caseData.currency} {(evalData?.total_paid ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wider block">
+                        Original Settlement
+                      </span>
+                      <span className="text-2xl font-black text-slate-800 dark:text-slate-200">
+                        {caseData.currency} {(caseData.settlement_total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <Button size="sm" variant="outline" onClick={handleOpenEditTerms} className="gap-1.5 text-xs">
-                <Pencil className="w-3.5 h-3.5" />
-                <span>Edit Terms</span>
+            </div>
+          ) : (
+            /* GREEN BANNER: ON TRACK (Image 5) */
+            <div className="bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-300 dark:border-emerald-900/60 rounded-xl p-5 shadow-xs">
+              <div className="flex items-start space-x-3">
+                <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                  <CheckCircle className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <h2 className="text-base font-black text-emerald-900 dark:text-emerald-200 tracking-wide uppercase">
+                      ON TRACK
+                    </h2>
+                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                      Evaluated as at {formatPrettyDate(asOfDate)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-800 dark:text-emerald-300 mt-1">
+                    All payment milestones are currently satisfied. Debtor is in full compliance with agreed settlement terms.
+                  </p>
+
+                  {/* Banner Key Figures Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 pt-3 border-t border-emerald-200 dark:border-emerald-900/60">
+                    <div>
+                      <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">
+                        Next Checkpoint Target
+                      </span>
+                      <span className="text-2xl font-black text-emerald-950 dark:text-emerald-100">
+                        {caseData.currency} {(evalData?.next_checkpoint_target ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                      {evalData?.next_checkpoint_date && (
+                        <span className="text-[11px] text-emerald-700 dark:text-emerald-400 block mt-0.5">
+                          Due by {formatPrettyDate(evalData.next_checkpoint_date)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">
+                        Total Paid to Date
+                      </span>
+                      <span className="text-2xl font-black text-slate-800 dark:text-slate-200">
+                        {caseData.currency} {(evalData?.total_paid ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">
+                        Remaining Under Settlement
+                      </span>
+                      <span className="text-2xl font-black text-slate-800 dark:text-slate-200">
+                        {caseData.currency} {(evalData?.remaining_under_settlement ?? Math.max(0, (caseData.settlement_total || 0) - (evalData?.total_paid || 0))).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Settlement Terms vs Reinstatement Terms Cards (Images 2 & 5) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Settlement terms card */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-3">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100 border-b pb-2 border-slate-100 dark:border-slate-800">
+                Settlement Terms
+              </h3>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/60">
+                  <span className="text-slate-500">Settlement Total</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">
+                    {caseData.currency} {(caseData.settlement_total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/60">
+                  <span className="text-slate-500">Total Paid to Date</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                    {caseData.currency} {(evalData?.total_paid ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-slate-500">Compliance Status</span>
+                  <span className={`font-bold ${isBreached ? "text-rose-600" : "text-emerald-600"}`}>
+                    {isBreached ? "Breached on milestone" : "On Track"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Reinstatement terms card */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-3">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100 border-b pb-2 border-slate-100 dark:border-slate-800">
+                Reinstatement Terms
+              </h3>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/60">
+                  <span className="text-slate-500">Reinstatement Debt</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">
+                    {caseData.currency} {(caseData.reinstatement_amount || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/60">
+                  <span className="text-slate-500">Interest Rate (% p.a.)</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">
+                    {caseData.reinstatement_interest_rate || 12}% p.a.
+                  </span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-slate-500">Interest Accrual Start Date</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">
+                    {formatPrettyDate(caseData.interest_accrual_start_date)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Module Navigation Tabs: Checkpoints | Currency Gain/Loss | Payments */}
+          <div className="border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={() => setActiveTab("settlement")}
+                className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center space-x-1.5 ${
+                  activeTab === "settlement"
+                    ? "border-emerald-600 text-emerald-600 dark:text-emerald-400"
+                    : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Payment Schedule / Milestones ({evalData?.checkpoints?.length ?? caseData.checkpoints?.length ?? 0})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab("fx")}
+                className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center space-x-1.5 ${
+                  activeTab === "fx"
+                    ? "border-emerald-600 text-emerald-600 dark:text-emerald-400"
+                    : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>Currency Gain / Loss ({caseData.currency_gain_losses?.length ?? 0})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab("payments")}
+                className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-colors flex items-center space-x-1.5 ${
+                  activeTab === "payments"
+                    ? "border-emerald-600 text-emerald-600 dark:text-emerald-400"
+                    : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>Payments Received ({caseData.payments?.length ?? 0})</span>
+              </button>
+            </div>
+
+            {activeTab === "settlement" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsCheckpointModalOpen(true)}
+                className="text-xs h-7 mb-1"
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Add Milestone
               </Button>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
-              <div className="p-3 border rounded-md space-y-1">
-                <div className="text-muted-foreground">Payment Frequency:</div>
-                <div className="font-semibold capitalize">{agr.frequency}</div>
-              </div>
-              <div className="p-3 border rounded-md space-y-1">
-                <div className="text-muted-foreground">Interest Rate:</div>
-                <div className="font-semibold">{agr.interest_rate}% per annum</div>
-              </div>
-              <div className="p-3 border rounded-md space-y-1">
-                <div className="text-muted-foreground">Grace Period:</div>
-                <div className="font-semibold">{agr.grace_period_days} Days</div>
-              </div>
-              <div className="p-3 border rounded-md space-y-1">
-                <div className="text-muted-foreground">Penalty Clause:</div>
-                <div className="font-semibold">{agr.penalty_rate_or_fixed}% ({agr.penalty_type})</div>
-              </div>
-              <div className="p-3 border rounded-md space-y-1">
-                <div className="text-muted-foreground">Number of Instalments:</div>
-                <div className="font-semibold">{agr.instalments_count} instalments</div>
-              </div>
-              <div className="p-3 border rounded-md space-y-1">
-                <div className="text-muted-foreground">Start Date:</div>
-                <div className="font-semibold font-mono">{agr.start_date}</div>
-              </div>
-              <div className="p-3 border rounded-md space-y-1 sm:col-span-2 md:col-span-3">
-                <div className="text-muted-foreground">Default Condition Rule:</div>
-                <div className="font-semibold">{agr.default_conditions || "Standard legal default terms apply."}</div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+            )}
 
-      {/* MODAL 1: Record Payment Dialog */}
-      <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Record Payment for {caseData.defendant_name}</DialogTitle>
-            <DialogDescription className="text-xs">
-              Record a received payment. The system will allocate it sequentially and update the outstanding balance.
-            </DialogDescription>
-          </DialogHeader>
+            {activeTab === "fx" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsFxModalOpen(true)}
+                className="text-xs h-7 mb-1"
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Record FX Item
+              </Button>
+            )}
+          </div>
 
-          <form onSubmit={handleRecordPaymentSubmit} className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="pmt_amount" className="text-xs">Amount ({agr?.currency || "USD"})</Label>
+          {/* TAB CONTENT: Payment Schedule / Milestones (Image 2 & 5) */}
+          {activeTab === "settlement" && (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-800/40 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      <th className="py-3 px-4">Milestone</th>
+                      <th className="py-3 px-4">Due Date</th>
+                      <th className="py-3 px-4">Cumulative Required</th>
+                      <th className="py-3 px-4">Actually Paid by Then</th>
+                      <th className="py-3 px-4">Milestone Status</th>
+                      <th className="py-3 px-4">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {(evalData?.checkpoints ?? caseData.checkpoints ?? []).length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-slate-400">
+                          No milestone checkpoints registered for this settlement.
+                        </td>
+                      </tr>
+                    ) : (
+                      (evalData?.checkpoints ?? caseData.checkpoints ?? []).map((cp) => (
+                        <tr key={cp.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="py-3 px-4 font-bold text-slate-800 dark:text-slate-200">
+                            Checkpoint {cp.checkpoint_number}
+                          </td>
+                          <td className="py-3 px-4 font-semibold text-slate-700 dark:text-slate-300">
+                            {formatPrettyDate(cp.due_date)}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-slate-900 dark:text-slate-100">
+                            {caseData.currency} {cp.cumulative_required.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3 px-4 font-semibold text-slate-800 dark:text-slate-200">
+                            {caseData.currency} {(cp.actually_paid_by_then ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3 px-4">
+                            {cp.status === "met" ? (
+                              <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 hover:bg-emerald-100">
+                                Met
+                              </Badge>
+                            ) : cp.status === "missed" ? (
+                              <Badge className="bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-200 hover:bg-rose-100">
+                                Missed
+                              </Badge>
+                            ) : cp.status === "on_track" ? (
+                              <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-200 hover:bg-blue-100">
+                                On Track
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-slate-500">
+                                Not Due
+                              </Badge>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-slate-400">
+                            {cp.notes || "-"}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB CONTENT: Currency Gain / Loss Analysis (Image 4) */}
+          {activeTab === "fx" && (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs">
+              <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    Foreign Exchange (FX) Gain / Loss on Receipts
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Compares payment date conversion rates against due date conversion rates.
+                  </p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-800/40 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      <th className="py-3 px-4">Due Date</th>
+                      <th className="py-3 px-4">Amount ({caseData.currency})</th>
+                      <th className="py-3 px-4">Payment Date</th>
+                      <th className="py-3 px-4">Due Date Rate</th>
+                      <th className="py-3 px-4">Payment Date Rate</th>
+                      <th className="py-3 px-4">Impact on Creditor</th>
+                      <th className="py-3 px-4">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {(caseData.currency_gain_losses ?? []).length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-slate-400">
+                          No currency gain/loss conversions recorded yet. Click "Record FX Item" to add.
+                        </td>
+                      </tr>
+                    ) : (
+                      caseData.currency_gain_losses.map((fx) => (
+                        <tr key={fx.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="py-3 px-4 font-semibold text-slate-700 dark:text-slate-300">
+                            {formatPrettyDate(fx.obligation_due_date)}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-slate-900 dark:text-slate-100">
+                            {caseData.currency} {fx.amount_contract_curr.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3 px-4 text-slate-700 dark:text-slate-300">
+                            {formatPrettyDate(fx.payment_date)}
+                          </td>
+                          <td className="py-3 px-4 font-mono font-semibold">
+                            {fx.due_date_rate.toFixed(4)}
+                          </td>
+                          <td className="py-3 px-4 font-mono font-semibold">
+                            {fx.actual_payment_rate.toFixed(4)}
+                          </td>
+                          <td className="py-3 px-4 font-bold">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[11px] ${
+                                fx.local_currency_impact >= 0
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                  : "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
+                              }`}
+                            >
+                              {fx.local_currency_impact >= 0 ? "+" : ""}
+                              {fx.local_currency} {fx.local_currency_impact.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-400">
+                            {fx.notes || "-"}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB CONTENT: Payments Received */}
+          {activeTab === "payments" && (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-800/40 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      <th className="py-3 px-4">Payment Date</th>
+                      <th className="py-3 px-4">Amount Paid</th>
+                      <th className="py-3 px-4">Reference</th>
+                      <th className="py-3 px-4">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {(caseData.payments ?? []).length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="py-8 text-center text-slate-400">
+                          No payments recorded yet. Click "Record Payment" to log receipts.
+                        </td>
+                      </tr>
+                    ) : (
+                      caseData.payments.map((p) => (
+                        <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="py-3 px-4 font-semibold text-slate-700 dark:text-slate-300">
+                            {formatPrettyDate(p.payment_date)}
+                          </td>
+                          <td className="py-3 px-4 font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                            {p.currency || caseData.currency} {p.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400">
+                            {p.payment_reference}
+                          </td>
+                          <td className="py-3 px-4 text-slate-400">
+                            {p.notes || "-"}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* JUDGMENT DEBT ACCOUNT VIEW (Image 1) */}
+      {/* ========================================================================= */}
+      {!isSettlement && (
+        <div className="space-y-6">
+          {/* Top Key Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                Judgment Debt Principal
+              </span>
+              <span className="text-xl font-black text-slate-900 dark:text-slate-100 mt-1 block">
+                {caseData.currency} {(caseData.settlement_total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </span>
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                Ordered on {formatPrettyDate(caseData.judgment_date)}
+              </span>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                Costs Awarded
+              </span>
+              <span className="text-xl font-black text-slate-900 dark:text-slate-100 mt-1 block">
+                {caseData.currency} {(caseData.cost_awarded || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </span>
+              <span className="text-[10px] text-slate-400 mt-1 block">Legal Court Costs</span>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                Accrued Interest to Date
+              </span>
+              <span className="text-xl font-black text-rose-600 dark:text-rose-400 mt-1 block">
+                {caseData.currency} {(ledgerData?.total_cumulative_interest ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </span>
+              <span className="text-[10px] text-slate-400 mt-1 block">Method: Days / 360</span>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-900/60 rounded-xl p-4 shadow-xs bg-blue-50/20">
+              <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wider block">
+                Total Balance Owed
+              </span>
+              <span className="text-xl font-black text-blue-950 dark:text-blue-100 mt-1 block">
+                {caseData.currency} {(ledgerData?.total_amount_owed ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </span>
+              <span className="text-[10px] text-blue-600 dark:text-blue-400 mt-1 block">
+                Total Paid: {caseData.currency} {(ledgerData?.total_paid ?? 0).toLocaleString()}
+              </span>
+            </div>
+          </div>
+
+          {/* Rate Tranches Section (Base + Spread + Penal) */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
+                  Interest Rate History & Tranches
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Variable interest rates: All-in Rate = Base Rate + Spread + Penal Rate
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsTrancheModalOpen(true)}
+                className="text-xs h-8"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                Add Rate Tranche
+              </Button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-800/40 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    <th className="py-2.5 px-3">Effective From</th>
+                    <th className="py-2.5 px-3">Base Rate</th>
+                    <th className="py-2.5 px-3">Spread</th>
+                    <th className="py-2.5 px-3">Penal Rate</th>
+                    <th className="py-2.5 px-3">All-In Rate (% p.a.)</th>
+                    <th className="py-2.5 px-3">Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {(caseData.interest_tranches ?? []).length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-4 text-center text-slate-400">
+                        No interest rate tranches recorded. Click "Add Rate Tranche".
+                      </td>
+                    </tr>
+                  ) : (
+                    caseData.interest_tranches.map((tr) => (
+                      <tr key={tr.id}>
+                        <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">
+                          {formatPrettyDate(tr.effective_from)}
+                        </td>
+                        <td className="py-2.5 px-3">{tr.base_rate.toFixed(2)}%</td>
+                        <td className="py-2.5 px-3">{tr.spread.toFixed(2)}%</td>
+                        <td className="py-2.5 px-3">{tr.penal_rate.toFixed(2)}%</td>
+                        <td className="py-2.5 px-3 font-black text-blue-600 dark:text-blue-400 text-sm">
+                          {tr.all_in_rate.toFixed(2)}%
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-400">{tr.notes || "-"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Monthly Ledger Table (Image 1) */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
+                  Monthly Financial Ledger
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Calculation formula: Balance × All-In Rate × (Days / 360)
+                </p>
+              </div>
+
+              {ledgerData && ledgerData.rows.length > 12 && (
+                <button
+                  onClick={() => setShowAllLedgerMonths(!showAllLedgerMonths)}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 underline"
+                >
+                  {showAllLedgerMonths
+                    ? `Show recent 12 months`
+                    : `Show all ${ledgerData.rows.length} months`}
+                </button>
+              )}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                    <th className="py-3 px-3">#</th>
+                    <th className="py-3 px-4">Period</th>
+                    <th className="py-3 px-3 text-center">Days</th>
+                    <th className="py-3 px-3">Rate (% p.a.)</th>
+                    <th className="py-3 px-4">Principal Balance</th>
+                    <th className="py-3 px-3">Payment</th>
+                    <th className="py-3 px-4">Interest Due</th>
+                    <th className="py-3 px-4">Cumulative Interest</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {!ledgerData || ledgerData.rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-slate-400">
+                        No ledger rows generated yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    (showAllLedgerMonths ? ledgerData.rows : ledgerData.rows.slice(0, 12)).map((row) => (
+                      <tr key={row.index} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="py-2.5 px-3 text-slate-400">{row.index}</td>
+                        <td className="py-2.5 px-4 font-semibold text-slate-800 dark:text-slate-200">
+                          {row.period}
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-bold text-slate-600 dark:text-slate-400">
+                          {row.days}
+                        </td>
+                        <td className="py-2.5 px-3 font-semibold text-blue-600 dark:text-blue-400">
+                          {row.all_in_rate.toFixed(2)}%
+                        </td>
+                        <td className="py-2.5 px-4 font-bold text-slate-900 dark:text-slate-100">
+                          {caseData.currency} {row.balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-2.5 px-3 font-semibold text-emerald-600 dark:text-emerald-400">
+                          {row.payment ? `${caseData.currency} ${row.payment.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "-"}
+                        </td>
+                        <td className="py-2.5 px-4 font-semibold text-slate-800 dark:text-slate-200">
+                          {caseData.currency} {row.interest_due.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-2.5 px-4 font-bold text-slate-900 dark:text-slate-100">
+                          {caseData.currency} {row.cumulative_interest.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODALS */}
+      {/* ========================================================================= */}
+
+      {/* 1. Record Payment Modal */}
+      {isPaymentModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 max-w-md w-full shadow-xl space-y-4">
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              Record Payment Receipt
+            </h3>
+            <p className="text-xs text-slate-500">
+              Log an incoming payment from {caseData.defendant_name}. Calculations will refresh immediately.
+            </p>
+
+            <form onSubmit={handlePaymentSubmit} className="space-y-4 pt-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Payment Amount ({caseData.currency}) *
+                </label>
                 <Input
-                  id="pmt_amount"
                   type="number"
                   step="0.01"
-                  required
+                  min="0.01"
+                  placeholder="e.g. 500000.00"
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
+                  required
+                  autoFocus
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="pmt_date" className="text-xs">Payment Date</Label>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Payment Date *
+                </label>
                 <Input
-                  id="pmt_date"
                   type="date"
-                  required
                   value={paymentDate}
                   onChange={(e) => setPaymentDate(e.target.value)}
+                  required
                 />
               </div>
-            </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="pmt_ref" className="text-xs">Payment Reference / Cheque # / Slip</Label>
-              <Input
-                id="pmt_ref"
-                placeholder="e.g. CHQ-994821 or BANK-REF-001"
-                required
-                value={paymentRef}
-                onChange={(e) => setPaymentRef(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="pmt_notes" className="text-xs">Notes / Observations</Label>
-              <Input
-                id="pmt_notes"
-                placeholder="e.g. Paid via debtor's legal counsel"
-                value={paymentNotes}
-                onChange={(e) => setPaymentNotes(e.target.value)}
-              />
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsPaymentOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" size="sm" disabled={isSubmittingPayment}>
-                {isSubmittingPayment ? "Processing..." : "Save Payment & Update Balance"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* MODAL 2: Modify / Edit Terms Dialog */}
-      <Dialog open={isEditTermsOpen} onOpenChange={setIsEditTermsOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Pencil className="w-4 h-4 text-primary" />
-              <span>Modify Agreement Terms & Defendant Details</span>
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Update agreement terms, payment amounts, interest rates, or debtor info. Recalculations will update automatically.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSaveTermsSubmit} className="space-y-4 py-2 text-xs">
-            {/* Defendant Info */}
-            <div className="border rounded-lg p-3 space-y-3 bg-muted/10">
-              <span className="font-bold text-foreground block">Defendant Information</span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="edit_def_name" className="text-[11px]">Defendant Name</Label>
-                  <Input
-                    id="edit_def_name"
-                    value={editFormData.defendant_name || ""}
-                    onChange={(e) => setEditFormData({ ...editFormData, defendant_name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="edit_def_contact" className="text-[11px]">Contact Phone/Email</Label>
-                  <Input
-                    id="edit_def_contact"
-                    value={editFormData.defendant_contact || ""}
-                    onChange={(e) => setEditFormData({ ...editFormData, defendant_contact: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="edit_def_addr" className="text-[11px]">Address</Label>
-                  <Input
-                    id="edit_def_addr"
-                    value={editFormData.defendant_address || ""}
-                    onChange={(e) => setEditFormData({ ...editFormData, defendant_address: e.target.value })}
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Reference / Receipt Number
+                </label>
+                <Input
+                  type="text"
+                  placeholder="e.g. UMB-TX-88291"
+                  value={paymentRef}
+                  onChange={(e) => setPaymentRef(e.target.value)}
+                />
               </div>
-            </div>
 
-            {/* Financial Terms */}
-            <div className="border rounded-lg p-3 space-y-3">
-              <span className="font-bold text-foreground block">Financial Terms</span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="edit_orig_amt" className="text-[11px]">Total Agreed Amount</Label>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Notes
+                </label>
+                <Input
+                  type="text"
+                  placeholder="e.g. Cheque clearance / Bank wire"
+                  value={paymentNotes}
+                  onChange={(e) => setPaymentNotes(e.target.value)}
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsPaymentModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmittingPayment}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-9 px-4"
+                >
+                  {isSubmittingPayment ? "Saving..." : "Save Payment"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Add Milestone Checkpoint Modal */}
+      {isCheckpointModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 max-w-md w-full shadow-xl space-y-4">
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              Add Settlement Milestone Checkpoint
+            </h3>
+            <p className="text-xs text-slate-500">
+              Add a cumulative milestone checkpoint to evaluate settlement compliance.
+            </p>
+
+            <form onSubmit={handleCheckpointSubmit} className="space-y-4 pt-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Due Date *
+                </label>
+                <Input
+                  type="date"
+                  value={cpDueDate}
+                  onChange={(e) => setCpDueDate(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Cumulative Target ({caseData.currency}) *
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="e.g. 1000000.00"
+                  value={cpCumulative}
+                  onChange={(e) => setCpCumulative(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Single Tranche Amount ({caseData.currency})
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="e.g. 500000.00"
+                  value={cpAmount}
+                  onChange={(e) => setCpAmount(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Milestone Notes
+                </label>
+                <Input
+                  type="text"
+                  placeholder="e.g. Tranche 2 instalment"
+                  value={cpNotes}
+                  onChange={(e) => setCpNotes(e.target.value)}
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsCheckpointModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmittingCp}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-9 px-4"
+                >
+                  {isSubmittingCp ? "Adding..." : "Add Checkpoint"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Add Interest Tranche Modal */}
+      {isTrancheModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 max-w-md w-full shadow-xl space-y-4">
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              Add Interest Rate Tranche
+            </h3>
+            <p className="text-xs text-slate-500">
+              Configure variable interest rate terms effective from a specific date.
+            </p>
+
+            <form onSubmit={handleTrancheSubmit} className="space-y-4 pt-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Effective From *
+                </label>
+                <Input
+                  type="date"
+                  value={trancheEffDate}
+                  onChange={(e) => setTrancheEffDate(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Base Rate %
+                  </label>
                   <Input
-                    id="edit_orig_amt"
                     type="number"
                     step="0.01"
-                    value={editFormData.original_amount ?? ""}
-                    onChange={(e) => setEditFormData({ ...editFormData, original_amount: parseFloat(e.target.value) || 0 })}
+                    value={trancheBase}
+                    onChange={(e) => setTrancheBase(e.target.value)}
                     required
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="edit_curr" className="text-[11px]">Currency</Label>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Spread %
+                  </label>
                   <Input
-                    id="edit_curr"
-                    value={editFormData.currency || ""}
-                    onChange={(e) => setEditFormData({ ...editFormData, currency: e.target.value.toUpperCase() })}
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="edit_freq" className="text-[11px]">Payment Frequency</Label>
-                  <select
-                    id="edit_freq"
-                    className="w-full h-9 rounded-md border border-input bg-card text-foreground px-3 py-1 text-xs shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-                    value={editFormData.frequency || "monthly"}
-                    onChange={(e) => setEditFormData({ ...editFormData, frequency: e.target.value })}
-                  >
-                    <option value="monthly" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Monthly</option>
-                    <option value="weekly" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Weekly</option>
-                    <option value="biweekly" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Bi-weekly</option>
-                    <option value="quarterly" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Quarterly</option>
-                    <option value="lump_sum" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Lump Sum</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="edit_start_date" className="text-[11px]">Start Due Date</Label>
-                  <Input
-                    id="edit_start_date"
-                    type="date"
-                    value={editFormData.start_date || ""}
-                    onChange={(e) => setEditFormData({ ...editFormData, start_date: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="edit_inst_count" className="text-[11px]">No. of Instalments</Label>
-                  <Input
-                    id="edit_inst_count"
                     type="number"
-                    min="1"
-                    value={editFormData.instalments_count ?? 1}
-                    onChange={(e) => setEditFormData({ ...editFormData, instalments_count: parseInt(e.target.value) || 1 })}
+                    step="0.01"
+                    value={trancheSpread}
+                    onChange={(e) => setTrancheSpread(e.target.value)}
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="edit_int_rate" className="text-[11px]">Interest Rate (% p.a.)</Label>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Penal %
+                  </label>
                   <Input
-                    id="edit_int_rate"
                     type="number"
-                    step="0.1"
-                    value={editFormData.interest_rate ?? 0}
-                    onChange={(e) => setEditFormData({ ...editFormData, interest_rate: parseFloat(e.target.value) || 0 })}
+                    step="0.01"
+                    value={tranchePenal}
+                    onChange={(e) => setTranchePenal(e.target.value)}
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="edit_grace" className="text-[11px]">Grace Period (Days)</Label>
-                  <Input
-                    id="edit_grace"
-                    type="number"
-                    min="0"
-                    value={editFormData.grace_period_days ?? 0}
-                    onChange={(e) => setEditFormData({ ...editFormData, grace_period_days: parseInt(e.target.value) || 0 })}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="edit_pen_type" className="text-[11px]">Penalty Type</Label>
-                  <select
-                    id="edit_pen_type"
-                    className="w-full h-9 rounded-md border border-input bg-card text-foreground px-3 py-1 text-xs shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-                    value={editFormData.penalty_type || "percentage"}
-                    onChange={(e) => setEditFormData({ ...editFormData, penalty_type: e.target.value })}
-                  >
-                    <option value="percentage" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Percentage on Arrears (%)</option>
-                    <option value="per_day" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Per-Day Penalty</option>
-                    <option value="fixed_fee" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">Fixed Fee</option>
-                    <option value="none" className="bg-card text-foreground dark:bg-zinc-900 dark:text-zinc-100">None</option>
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="edit_pen_val" className="text-[11px]">Penalty Value</Label>
-                  <Input
-                    id="edit_pen_val"
-                    type="number"
-                    step="0.1"
-                    value={editFormData.penalty_rate_or_fixed ?? 0}
-                    onChange={(e) => setEditFormData({ ...editFormData, penalty_rate_or_fixed: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
+              <div className="p-2.5 bg-blue-50 dark:bg-blue-950/40 rounded-lg text-center border border-blue-200 dark:border-blue-900">
+                <span className="text-[11px] text-blue-600 dark:text-blue-400 font-bold uppercase block">
+                  All-In Effective Rate
+                </span>
+                <span className="text-lg font-black text-slate-900 dark:text-slate-100">
+                  {((parseFloat(trancheBase) || 0) + (parseFloat(trancheSpread) || 0) + (parseFloat(tranchePenal) || 0)).toFixed(2)}%
+                </span>
               </div>
 
-              <div className="space-y-1">
-                <Label htmlFor="edit_cond" className="text-[11px]">Default Conditions Clause</Label>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Notes / Source
+                </label>
                 <Input
-                  id="edit_cond"
-                  value={editFormData.default_conditions || ""}
-                  onChange={(e) => setEditFormData({ ...editFormData, default_conditions: e.target.value })}
+                  type="text"
+                  placeholder="e.g. Bank of Ghana Policy Rate Revision"
+                  value={trancheNotes}
+                  onChange={(e) => setTrancheNotes(e.target.value)}
                 />
               </div>
 
-              <div className="pt-2 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="regen_schedule"
-                  checked={editFormData.regenerate_schedule || false}
-                  onChange={(e) => setEditFormData({ ...editFormData, regenerate_schedule: e.target.checked })}
-                  className="rounded border-input text-primary focus:ring-primary"
-                />
-                <Label htmlFor="regen_schedule" className="text-xs cursor-pointer font-medium text-foreground">
-                  Regenerate full payment schedule according to new amounts/dates
-                </Label>
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsTrancheModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmittingTranche}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 px-4"
+                >
+                  {isSubmittingTranche ? "Saving..." : "Add Tranche"}
+                </Button>
               </div>
-            </div>
+            </form>
+          </div>
+        </div>
+      )}
 
-            <DialogFooter>
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsEditTermsOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" size="sm" disabled={isSavingTerms} className="font-bold">
-                {isSavingTerms ? "Saving Changes..." : "Save Changes & Recalculate"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* 4. Add FX Item Modal */}
+      {isFxModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 max-w-md w-full shadow-xl space-y-4">
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              Record Currency FX Impact Item
+            </h3>
+            <p className="text-xs text-slate-500">
+              Compare payment date FX conversion rate against milestone due date FX rate (Image 4).
+            </p>
 
-      {/* MODAL 3: Edit Specific Instalment Item Dialog */}
-      <Dialog open={editingInstalment !== null} onOpenChange={(open) => !open && setEditingInstalment(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Instalment #{editingInstalment?.instalment_number}</DialogTitle>
-            <DialogDescription className="text-xs">
-              Adjust the specific due date or amount due for this instalment.
-            </DialogDescription>
-          </DialogHeader>
+            <form onSubmit={handleFxSubmit} className="space-y-4 pt-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Obligation Due Date *
+                  </label>
+                  <Input
+                    type="date"
+                    value={fxDueDate}
+                    onChange={(e) => setFxDueDate(e.target.value)}
+                    required
+                  />
+                </div>
 
-          <form onSubmit={handleSaveInstalmentSubmit} className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="item_due_date" className="text-xs">Due Date</Label>
-              <Input
-                id="item_due_date"
-                type="date"
-                required
-                value={editInstalmentDate}
-                onChange={(e) => setEditInstalmentDate(e.target.value)}
-              />
-            </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Payment Date *
+                  </label>
+                  <Input
+                    type="date"
+                    value={fxPaymentDate}
+                    onChange={(e) => setFxPaymentDate(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="item_amount" className="text-xs">Amount Due ({agr?.currency})</Label>
-              <Input
-                id="item_amount"
-                type="number"
-                step="0.01"
-                required
-                value={editInstalmentAmount}
-                onChange={(e) => setEditInstalmentAmount(e.target.value)}
-              />
-            </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Amount in Contract Currency ({caseData.currency}) *
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="e.g. 500000.00"
+                  value={fxAmount}
+                  onChange={(e) => setFxAmount(e.target.value)}
+                  required
+                />
+              </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="item_notes" className="text-xs">Notes / Extension Justification</Label>
-              <Input
-                id="item_notes"
-                placeholder="e.g. Debtor requested agreed 14-day extension"
-                value={editInstalmentNotes}
-                onChange={(e) => setEditInstalmentNotes(e.target.value)}
-              />
-            </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Due Date FX Rate *
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.0001"
+                    placeholder="e.g. 7.1128"
+                    value={fxDueRate}
+                    onChange={(e) => setFxDueRate(e.target.value)}
+                    required
+                  />
+                </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" size="sm" onClick={() => setEditingInstalment(null)}>
-                Cancel
-              </Button>
-              <Button type="submit" size="sm" disabled={isSavingInstalment}>
-                {isSavingInstalment ? "Saving..." : "Save Instalment & Recalculate"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Payment Date FX Rate *
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.0001"
+                    placeholder="e.g. 7.2245"
+                    value={fxActualRate}
+                    onChange={(e) => setFxActualRate(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Notes
+                </label>
+                <Input
+                  type="text"
+                  placeholder="e.g. Delayed remittance impact"
+                  value={fxNotes}
+                  onChange={(e) => setFxNotes(e.target.value)}
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsFxModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmittingFx}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-9 px-4"
+                >
+                  {isSubmittingFx ? "Recording..." : "Record FX Item"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

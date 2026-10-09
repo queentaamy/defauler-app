@@ -1,8 +1,28 @@
+import calendar
 from datetime import date, datetime, timedelta
 from dateutil.relativedelta import relativedelta
-from typing import List, Dict, Any, Tuple
-from app.models import Case, Agreement, PaymentPlanItem, Payment, CalculationRecord
-from app.schemas import CalculationBreakdown, GainsAndLossesBreakdown, PeriodDefaultImpact
+from typing import List, Dict, Any, Tuple, Optional
+from app.models import (
+    Case, 
+    Agreement, 
+    PaymentPlanItem, 
+    Payment, 
+    CalculationRecord,
+    PaymentCheckpoint,
+    InterestRateTranche,
+    CurrencyGainLossItem
+)
+from app.schemas import (
+    CalculationBreakdown, 
+    GainsAndLossesBreakdown, 
+    PeriodDefaultImpact,
+    MonthlyLedgerRow,
+    MonthlyLedgerResponse,
+    SettlementEvaluationResponse,
+    PaymentCheckpointResponse,
+    CurrencyGainLossResponse,
+    CurrencyGainLossItemResponse
+)
 
 def generate_schedule_items(
     original_amount: float,
@@ -18,7 +38,6 @@ def generate_schedule_items(
         instalments_count = 1
 
     base_amount = round(original_amount / instalments_count, 2)
-    # Total assigned so far
     total_assigned = base_amount * instalments_count
     diff = round(original_amount - total_assigned, 2)
 
@@ -28,7 +47,6 @@ def generate_schedule_items(
     for i in range(1, instalments_count + 1):
         amt = base_amount
         if i == instalments_count:
-            # Add any penny rounding difference to the last instalment
             amt = round(amt + diff, 2)
 
         items.append({
@@ -41,7 +59,6 @@ def generate_schedule_items(
             "notes": None
         })
 
-        # Calculate next due date
         if frequency == "weekly":
             current_due = current_due + timedelta(days=7)
         elif frequency == "biweekly":
@@ -62,54 +79,57 @@ def evaluate_schedule_and_defaults(
     eval_date: date = None
 ) -> Tuple[str, List[PaymentPlanItem]]:
     """
-    Allocates payments sequentially to instalment items and evaluates status:
-    'upcoming', 'paid', 'partially_paid', 'overdue', 'defaulted'.
-    Returns overall case status ('settled', 'defaulted', 'overdue', 'active').
+    Allocates payments sequentially to instalment items and evaluates status.
     """
     if eval_date is None:
         eval_date = date.today()
 
-    # Sort payments chronologically
     sorted_payments = sorted(payments, key=lambda p: p.payment_date)
     total_paid_pool = sum(p.amount for p in sorted_payments)
     
-    # Also find last payment date
-    last_payment_date = sorted_payments[-1].payment_date if sorted_payments else None
+    sorted_items = sorted(items, key=lambda x: x.instalment_number)
 
-    remaining_cash = total_paid_pool
+    remaining_pool = total_paid_pool
+    overall_status = "active"
+    has_defaulted = False
+    has_overdue = False
 
-    # Allocate cash to items in order
-    for item in sorted(items, key=lambda x: x.instalment_number):
-        needed = item.amount_due
-        allocated = min(remaining_cash, needed)
-        item.amount_paid = round(allocated, 2)
-        remaining_cash = round(remaining_cash - allocated, 2)
+    for item in sorted_items:
+        due = item.due_date
+        amt_due = item.amount_due
 
-        grace_deadline = item.due_date + timedelta(days=grace_period_days)
-
-        if item.amount_paid >= item.amount_due:
+        if remaining_pool >= amt_due:
+            item.amount_paid = amt_due
             item.status = "paid"
-            item.paid_date = last_payment_date or item.due_date
-        elif item.amount_paid > 0:
-            if eval_date <= item.due_date:
+            remaining_pool = round(remaining_pool - amt_due, 2)
+            last_pmt = [p for p in sorted_payments if p.payment_date <= due]
+            item.paid_date = last_pmt[-1].payment_date if last_pmt else due
+        elif remaining_pool > 0:
+            item.amount_paid = round(remaining_pool, 2)
+            remaining_pool = 0.0
+            
+            grace_deadline = due + timedelta(days=grace_period_days)
+            if eval_date > grace_deadline:
+                item.status = "defaulted"
+                has_defaulted = True
+            elif eval_date > due:
+                item.status = "overdue"
+                has_overdue = True
+            else:
                 item.status = "partially_paid"
-            elif item.due_date < eval_date <= grace_deadline:
-                item.status = "overdue"
-            else:
-                item.status = "defaulted"
         else:
-            if eval_date <= item.due_date:
-                item.status = "upcoming"
-            elif item.due_date < eval_date <= grace_deadline:
-                item.status = "overdue"
-            else:
+            item.amount_paid = 0.0
+            grace_deadline = due + timedelta(days=grace_period_days)
+            if eval_date > grace_deadline:
                 item.status = "defaulted"
+                has_defaulted = True
+            elif eval_date > due:
+                item.status = "overdue"
+                has_overdue = True
+            else:
+                item.status = "upcoming"
 
-    # Determine overall case status
-    all_paid = all(item.status == "paid" for item in items)
-    has_defaulted = any(item.status == "defaulted" for item in items)
-    has_overdue = any(item.status == "overdue" for item in items)
-
+    all_paid = all(it.status == "paid" for it in sorted_items) and len(sorted_items) > 0
     if all_paid:
         overall_status = "settled"
     elif has_defaulted:
@@ -119,7 +139,7 @@ def evaluate_schedule_and_defaults(
     else:
         overall_status = "active"
 
-    return overall_status, items
+    return overall_status, sorted_items
 
 def calculate_outstanding_amount(
     case: Case,
@@ -129,102 +149,96 @@ def calculate_outstanding_amount(
     calc_date: date = None
 ) -> CalculationBreakdown:
     """
-    Deterministic calculation engine:
-    Formula:
-    1. Total Payments Made = Sum of all recorded payments
-    2. Outstanding Principal = Original Amount - Total Payments Made
-    3. Accrued Interest = Outstanding Principal * (interest_rate / 100) * (days_elapsed / 365)
-    4. Default Penalties = Calculated according to agreement terms (fixed or percentage on arrears)
-    5. Subtotal = Outstanding Principal + Accrued Interest + Penalties
-    6. Currency Conversion = Subtotal * Exchange Rate (if applicable)
+    Deterministic mathematical engine calculating:
+    Original Debt - Payments Made = Outstanding Principal + Accrued Interest + Default Penalties = Current Amount Owed.
     """
     if calc_date is None:
         calc_date = date.today()
 
     logs = []
-    
-    # 1. Payments made
+    orig_amt = round(agreement.original_amount, 2)
     total_paid = round(sum(p.amount for p in payments), 2)
-    original_amount = round(agreement.original_amount, 2)
-    outstanding_principal = round(max(0.0, original_amount - total_paid), 2)
+    outstanding_principal = round(max(0.0, orig_amt - total_paid), 2)
 
-    logs.append(f"Original Agreement Amount: {agreement.currency} {original_amount:,.2f}")
-    logs.append(f"Less Total Payments Recorded ({len(payments)} payments): -{agreement.currency} {total_paid:,.2f}")
-    logs.append(f"Outstanding Principal Balance: {agreement.currency} {outstanding_principal:,.2f}")
+    logs.append(f"1. Original Agreed Debt: {agreement.currency} {orig_amt:,.2f}")
+    logs.append(f"2. Total Recorded Payments: {agreement.currency} {total_paid:,.2f}")
+    logs.append(f"3. Outstanding Principal Balance: {agreement.currency} {outstanding_principal:,.2f}")
 
-    # 2. Accrued Interest
+    start = agreement.start_date
+    interest_rate_annual = agreement.interest_rate
     accrued_interest = 0.0
-    if agreement.interest_rate > 0 and outstanding_principal > 0:
-        start_date = agreement.start_date
-        days_elapsed = max(0, (calc_date - start_date).days)
-        # Standard annual interest calculation formula
-        accrued_interest = round(outstanding_principal * (agreement.interest_rate / 100.0) * (days_elapsed / 365.0), 2)
+
+    if interest_rate_annual > 0 and outstanding_principal > 0:
+        days_elapsed = max(0, (calc_date - start).days)
+        year_fraction = days_elapsed / 365.0
+        accrued_interest = round(outstanding_principal * (interest_rate_annual / 100.0) * year_fraction, 2)
         logs.append(
-            f"Plus Accrued Interest ({agreement.interest_rate}% p.a. for {days_elapsed} days from {start_date} to {calc_date}): +{agreement.currency} {accrued_interest:,.2f}"
+            f"4. Contract Interest Accrual: {agreement.currency} {accrued_interest:,.2f} "
+            f"({interest_rate_annual}% p.a. over {days_elapsed} days on balance {agreement.currency} {outstanding_principal:,.2f})"
         )
     else:
-        logs.append(f"Accrued Interest: +{agreement.currency} 0.00 (No interest applicable or principal cleared)")
+        logs.append("4. Contract Interest Accrual: 0.00 (No interest applicable or balance cleared)")
 
-    # 3. Default Penalties
-    default_penalty = 0.0
-    # Evaluate defaulted items
-    defaulted_items = [item for item in items if item.status == "defaulted"]
-    
-    if defaulted_items and outstanding_principal > 0:
-        overdue_arrears = round(sum(max(0.0, item.amount_due - item.amount_paid) for item in defaulted_items), 2)
-        
-        if agreement.penalty_type == "percentage" and agreement.penalty_rate_or_fixed > 0:
-            default_penalty = round(overdue_arrears * (agreement.penalty_rate_or_fixed / 100.0), 2)
-            logs.append(
-                f"Plus Default Penalty ({agreement.penalty_rate_or_fixed}% on defaulted arrears of {agreement.currency} {overdue_arrears:,.2f}): +{agreement.currency} {default_penalty:,.2f}"
-            )
-        elif agreement.penalty_type == "fixed_fee" and agreement.penalty_rate_or_fixed > 0:
-            default_penalty = round(agreement.penalty_rate_or_fixed, 2)
-            logs.append(
-                f"Plus Fixed Default Penalty Fee: +{agreement.currency} {default_penalty:,.2f}"
-            )
-        elif agreement.penalty_type == "per_day" and agreement.penalty_rate_or_fixed > 0:
-            earliest_default_due = min(item.due_date for item in defaulted_items)
-            days_late = max(0, (calc_date - earliest_default_due).days)
-            default_penalty = round(days_late * agreement.penalty_rate_or_fixed, 2)
-            logs.append(
-                f"Plus Per-Day Default Penalty ({days_late} days late @ {agreement.currency} {agreement.penalty_rate_or_fixed}/day): +{agreement.currency} {default_penalty:,.2f}"
-            )
-        else:
-            logs.append("Default Penalties: +0.00 (No penalty clause triggered)")
-    else:
-        logs.append("Default Penalties: +0.00 (No defaulted instalments)")
+    default_penalties = 0.0
+    pen_rate = agreement.penalty_rate_or_fixed
+    pen_type = agreement.penalty_type
+    grace_days = agreement.grace_period_days
 
-    # 4. Subtotal in original currency
-    subtotal = round(outstanding_principal + accrued_interest + default_penalty, 2)
-    logs.append(f"Subtotal Amount Owed in {agreement.currency}: {agreement.currency} {subtotal:,.2f}")
+    for item in items:
+        if item.status == "defaulted":
+            unpaid_instalment = round(item.amount_due - item.amount_paid, 2)
+            if unpaid_instalment <= 0:
+                continue
 
-    # 5. Currency conversion
-    exchange_rate = agreement.exchange_rate if agreement.exchange_rate and agreement.exchange_rate > 0 else 1.0
-    target_currency = agreement.target_currency if agreement.target_currency else agreement.currency
-    
-    if target_currency != agreement.currency and exchange_rate != 1.0:
-        total_amount_owed = round(subtotal * exchange_rate, 2)
+            if pen_type == "percentage":
+                inst_pen = round(unpaid_instalment * (pen_rate / 100.0), 2)
+                default_penalties = round(default_penalties + inst_pen, 2)
+                logs.append(
+                    f"5. Default Penalty (Instalment #{item.instalment_number}): {agreement.currency} {inst_pen:,.2f} "
+                    f"({pen_rate}% on arrears {agreement.currency} {unpaid_instalment:,.2f})"
+                )
+            elif pen_type == "fixed_fee":
+                default_penalties = round(default_penalties + pen_rate, 2)
+                logs.append(
+                    f"5. Default Penalty (Instalment #{item.instalment_number}): Fixed fee of {agreement.currency} {pen_rate:,.2f}"
+                )
+            elif pen_type == "per_day":
+                grace_limit = item.due_date + timedelta(days=grace_days)
+                days_over_grace = max(0, (calc_date - grace_limit).days)
+                inst_pen = round(days_over_grace * pen_rate, 2)
+                default_penalties = round(default_penalties + inst_pen, 2)
+                logs.append(
+                    f"5. Default Penalty (Instalment #{item.instalment_number}): {agreement.currency} {inst_pen:,.2f} "
+                    f"({days_over_grace} days overdue post-grace at {agreement.currency} {pen_rate}/day)"
+                )
+
+    if default_penalties == 0.0:
+        logs.append("5. Default Penalties: 0.00 (No defaulted arrears triggered)")
+
+    total_owed = round(outstanding_principal + accrued_interest + default_penalties, 2)
+    logs.append(
+        f"6. Total Current Amount Owed: {agreement.currency} {total_owed:,.2f} "
+        f"(= Principal {outstanding_principal:,.2f} + Interest {accrued_interest:,.2f} + Penalties {default_penalties:,.2f})"
+    )
+
+    if agreement.exchange_rate and agreement.exchange_rate != 1.0 and agreement.target_currency:
+        converted_total = round(total_owed * agreement.exchange_rate, 2)
         logs.append(
-            f"Converted to {target_currency} using exchange rate 1 {agreement.currency} = {exchange_rate:.4f} {target_currency}: {target_currency} {total_amount_owed:,.2f}"
+            f"7. Currency Conversion Audit: {agreement.currency} {total_owed:,.2f} @ {agreement.exchange_rate} = "
+            f"{agreement.target_currency} {converted_total:,.2f}"
         )
-    else:
-        total_amount_owed = subtotal
-        if exchange_rate != 1.0:
-            logs.append(f"Exchange rate recorded for audit: 1.0000")
-
-    logs.append(f"FINAL CURRENT AMOUNT OWED: {target_currency} {total_amount_owed:,.2f}")
+        total_owed = converted_total
 
     return CalculationBreakdown(
-        original_amount=original_amount,
+        original_amount=orig_amt,
         total_paid=total_paid,
         outstanding_principal=outstanding_principal,
         accrued_interest=accrued_interest,
-        default_interest_or_penalty=default_penalty,
-        exchange_rate=exchange_rate,
+        default_interest_or_penalty=default_penalties,
+        exchange_rate=agreement.exchange_rate or 1.0,
         currency=agreement.currency,
-        target_currency=target_currency,
-        total_amount_owed=total_amount_owed,
+        target_currency=agreement.target_currency,
+        total_amount_owed=total_owed,
         step_by_step_log=logs,
         calculation_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     )
@@ -249,7 +263,6 @@ def calculate_gains_and_losses(
     total_agreed = round(agreement.original_amount, 2)
     total_paid_to_date = round(sum(p.amount for p in payments), 2)
     
-    # Calculate expected cash flow to date (instalments due on or before calc_date)
     total_expected_to_date = round(
         sum(it.amount_due for it in sorted_items if it.due_date <= calc_date),
         2
@@ -287,7 +300,6 @@ def calculate_gains_and_losses(
         elif is_in_grace or (is_past_due and shortfall > 0):
             overdue_count += 1
             
-        # Interest on period shortfall for days elapsed
         period_interest = 0.0
         if agreement.interest_rate > 0 and shortfall > 0 and days_overdue > 0:
             period_interest = round(
@@ -295,7 +307,6 @@ def calculate_gains_and_losses(
                 2
             )
             
-        # Penalty for period default
         period_penalty = 0.0
         if is_defaulted and shortfall > 0 and agreement.penalty_rate_or_fixed > 0:
             if agreement.penalty_type == "percentage":
@@ -329,7 +340,6 @@ def calculate_gains_and_losses(
             )
         )
 
-    # Use overall engine calculations to guarantee full harmony
     overall_calc = calculate_outstanding_amount(case, agreement, sorted_items, payments, calc_date)
     final_interest = round(max(total_period_interest, overall_calc.accrued_interest), 2)
     final_penalties = round(max(total_period_penalties, overall_calc.default_interest_or_penalty), 2)
@@ -367,4 +377,275 @@ def calculate_gains_and_losses(
         default_clause_status=default_clause_status,
         evaluation_date=str(calc_date),
         periods=periods_impact
+    )
+
+# =========================================================================
+# ACCRUE CORE FINANCIAL MODULES (As Seen In Reference Screenshots)
+# =========================================================================
+
+def generate_monthly_ledger(
+    case: Case,
+    tranches: List[InterestRateTranche],
+    payments: List[Payment],
+    as_of_date: Optional[date] = None
+) -> MonthlyLedgerResponse:
+    """
+    Generates exact month-by-month financial ledger (Image 1):
+    Columns: # | Period | Days | All-in rate | Balance | Payment | Interest due | Cumulative interest.
+    Formula: Balance * Rate * (Days / 360).
+    """
+    if as_of_date is None:
+        as_of_date = date.today()
+
+    judgment_date = case.judgment_date or (case.created_at.date() if case.created_at else date(2018, 1, 1))
+    cost_awarded = round(case.cost_awarded or 0.0, 2)
+    
+    agr = case.agreements[0] if getattr(case, 'agreements', None) and len(case.agreements) > 0 else None
+    if agr:
+        debt_principal = agr.original_amount
+    else:
+        debt_principal = case.settlement_total or 0.0
+    
+    opening_balance = round(debt_principal + cost_awarded, 2)
+    currency = case.currency or "GHS"
+    interest_method = case.interest_method or "simple_30_360"
+    
+    sorted_tranches = sorted(tranches, key=lambda t: t.effective_from)
+    sorted_payments = sorted(payments, key=lambda p: p.payment_date)
+
+    rows: List[MonthlyLedgerRow] = []
+    
+    current_period_start = judgment_date
+    current_balance = opening_balance
+    cumulative_interest = 0.0
+    total_paid = 0.0
+    index = 1
+    
+    anchor_day = judgment_date.day
+    while current_period_start < as_of_date:
+        next_m = current_period_start.month + 1 if current_period_start.month < 12 else 1
+        next_y = current_period_start.year if current_period_start.month < 12 else current_period_start.year + 1
+        max_days_next = calendar.monthrange(next_y, next_m)[1]
+        curr_max_days = calendar.monthrange(current_period_start.year, current_period_start.month)[1]
+
+        if current_period_start.day == curr_max_days or anchor_day >= 28:
+            next_month_date = date(next_y, next_m, max_days_next)
+        else:
+            next_month_date = date(next_y, next_m, min(anchor_day, max_days_next))
+
+        period_end = min(next_month_date, as_of_date)
+        days = (period_end - current_period_start).days
+        if days <= 0:
+            break
+            
+        applicable_tranche = None
+        for t in sorted_tranches:
+            if t.effective_from <= current_period_start:
+                applicable_tranche = t
+            else:
+                break
+                
+        all_in_rate = applicable_tranche.all_in_rate if applicable_tranche else (agr.interest_rate if agr else 16.20)
+        
+        period_payment_amt = 0.0
+        for p in sorted_payments:
+            if current_period_start <= p.payment_date < period_end:
+                period_payment_amt += p.amount
+                
+        period_payment_amt = round(period_payment_amt, 2)
+        total_paid = round(total_paid + period_payment_amt, 2)
+        
+        # Interest due matching Image 1:
+        # Days / 360 day-count convention
+        if interest_method == "simple_30_360":
+            interest_due = round(current_balance * (all_in_rate / 100.0) * (days / 360.0), 2)
+        elif interest_method == "compound":
+            interest_due = round(current_balance * ((1 + (all_in_rate / 100.0) / 12.0) - 1), 2)
+        else: # simple_actual_365
+            interest_due = round(current_balance * (all_in_rate / 100.0) * (days / 365.0), 2)
+            
+        cumulative_interest = round(cumulative_interest + interest_due, 2)
+        
+        period_str = f"{current_period_start.strftime('%d %b %Y')} - {period_end.strftime('%d %b %Y')}"
+        rows.append(MonthlyLedgerRow(
+            index=index,
+            period=period_str,
+            days=days,
+            all_in_rate=round(all_in_rate, 2),
+            balance=current_balance,
+            payment=period_payment_amt if period_payment_amt > 0 else None,
+            interest_due=interest_due,
+            cumulative_interest=cumulative_interest
+        ))
+        
+        current_balance = round(max(0.0, current_balance - period_payment_amt), 2)
+        current_period_start = period_end
+        index += 1
+
+    total_amount_owed = round(current_balance + cumulative_interest, 2)
+
+    return MonthlyLedgerResponse(
+        currency=currency,
+        judgment_debt=debt_principal,
+        judgment_date=judgment_date.strftime("%d %b %Y"),
+        cost_awarded=cost_awarded,
+        interest_method="Simple" if "simple" in interest_method else "Compound",
+        as_of_date=as_of_date.strftime("%d %b %Y"),
+        current_balance=current_balance,
+        total_cumulative_interest=cumulative_interest,
+        total_paid=total_paid,
+        total_amount_owed=total_amount_owed,
+        rows=rows
+    )
+
+def evaluate_settlement_checkpoints(
+    case: Case,
+    checkpoints: List[PaymentCheckpoint],
+    payments: List[Payment],
+    as_of_date: Optional[date] = None
+) -> SettlementEvaluationResponse:
+    """
+    Evaluates cumulative checkpoints for settlement accounts (Image 2 & Image 5).
+    Detects breach when cumulative payments < cumulative required by checkpoint date.
+    Triggers SETTLEMENT BREACHED and calculates full reinstatement debt + interest.
+    """
+    if as_of_date is None:
+        as_of_date = date.today()
+
+    agr = case.agreements[0] if getattr(case, 'agreements', None) and len(case.agreements) > 0 else None
+    settlement_total = round(case.settlement_total or (agr.original_amount if agr else 0.0), 2)
+    reinstatement_amount = round(case.reinstatement_amount or settlement_total, 2)
+    reinstatement_rate = round(case.reinstatement_interest_rate or 12.0, 2)
+    
+    sorted_cps = sorted(checkpoints, key=lambda c: (c.due_date, c.checkpoint_number))
+    sorted_payments = sorted(payments, key=lambda p: p.payment_date)
+    
+    total_paid_as_of = round(sum(p.amount for p in sorted_payments if p.payment_date <= as_of_date), 2)
+
+    cp_responses: List[PaymentCheckpointResponse] = []
+    
+    is_breached = False
+    breached_checkpoint = None
+    
+    for cp in sorted_cps:
+        paid_by_then = round(sum(p.amount for p in sorted_payments if p.payment_date <= cp.due_date), 2)
+        
+        if paid_by_then >= cp.cumulative_required:
+            status = "met"
+        elif as_of_date > cp.due_date:
+            status = "missed"
+            if not is_breached:
+                is_breached = True
+                breached_checkpoint = cp
+        else:
+            status = "not_due"
+
+        cp_responses.append(PaymentCheckpointResponse(
+            id=cp.id,
+            case_id=cp.case_id,
+            checkpoint_number=cp.checkpoint_number,
+            due_date=cp.due_date.strftime("%d %b %Y") if hasattr(cp.due_date, 'strftime') else str(cp.due_date),
+            cumulative_required=round(cp.cumulative_required, 2),
+            amount_required=round(cp.amount_required, 2),
+            actually_paid_by_then=paid_by_then,
+            status=status,
+            notes=cp.notes
+        ))
+
+    if is_breached and breached_checkpoint:
+        needed_amt = breached_checkpoint.cumulative_required
+        needed_date = breached_checkpoint.due_date.strftime("%d %b %Y")
+        status_banner = "SETTLEMENT BREACHED"
+        status_message = (
+            f"Cumulative payments fell short of what was required by {needed_date} "
+            f"(needed {case.currency} {needed_amt:,.2f}). Under the settlement's own terms, the full reinstatement figure now applies."
+        )
+        
+        accrual_start = case.interest_accrual_start_date or breached_checkpoint.due_date
+        unpaid_reinstatement_principal = round(max(0.0, reinstatement_amount - total_paid_as_of), 2)
+        days_accruing = max(0, (as_of_date - accrual_start).days) if as_of_date > accrual_start else 0
+        reinstatement_interest = round(unpaid_reinstatement_principal * (reinstatement_rate / 100.0) * (days_accruing / 365.0), 2)
+        reinstated_amount_due = round(unpaid_reinstatement_principal + reinstatement_interest, 2)
+        
+        remaining_under_settlement = None
+        next_target = None
+        next_target_date = None
+    else:
+        if total_paid_as_of >= settlement_total and settlement_total > 0:
+            status_banner = "FULLY SETTLED"
+            status_message = "All settlement obligations have been satisfied in full."
+            remaining_under_settlement = 0.0
+            next_target = None
+            next_target_date = None
+        else:
+            status_banner = "ON TRACK"
+            remaining_under_settlement = round(max(0.0, settlement_total - total_paid_as_of), 2)
+            next_cp = next((cp for cp in cp_responses if cp.status == "not_due"), None)
+            if next_cp:
+                next_target = next_cp.cumulative_required
+                next_target_date = next_cp.due_date
+                status_message = f"All schedule checkpoints met so far. Next: {case.currency} {next_target:,.2f} cumulative by {next_target_date}."
+            else:
+                status_message = "All schedule checkpoints met so far."
+                next_target = None
+                next_target_date = None
+        reinstated_amount_due = None
+
+    return SettlementEvaluationResponse(
+        is_breached=is_breached,
+        status=status_banner,
+        status_message=status_message,
+        settlement_total=settlement_total,
+        reinstatement_amount=reinstatement_amount,
+        reinstatement_interest_rate=reinstatement_rate,
+        interest_accrual_start_date=case.interest_accrual_start_date.strftime("%d %b %Y") if case.interest_accrual_start_date else None,
+        as_of_date=as_of_date.strftime("%d/%m/%Y"),
+        total_paid=total_paid_as_of,
+        reinstated_amount_due=reinstated_amount_due,
+        remaining_under_settlement=remaining_under_settlement,
+        next_checkpoint_target=next_target,
+        next_checkpoint_date=next_target_date,
+        checkpoints=cp_responses
+    )
+
+def calculate_fx_gain_loss(
+    case: Case,
+    fx_items: List[CurrencyGainLossItem]
+) -> CurrencyGainLossResponse:
+    """
+    Calculates currency conversion gains/losses on payments (Image 4):
+    Compares each payment's actual conversion against what it would have been if paid on the date originally due.
+    Formula: (due_date_rate - actual_payment_rate) * amount_contract_curr.
+    """
+    local_currency = "GHS"
+    contract_currency = case.currency or "USD"
+    
+    item_responses: List[CurrencyGainLossItemResponse] = []
+    total_impact = 0.0
+    
+    sorted_items = sorted(fx_items, key=lambda x: x.obligation_due_date)
+    for it in sorted_items:
+        impact = round((it.due_date_rate - it.actual_payment_rate) * it.amount_contract_curr, 2)
+        total_impact = round(total_impact + impact, 2)
+        local_curr = it.local_currency or "GHS"
+        local_currency = local_curr
+        
+        item_responses.append(CurrencyGainLossItemResponse(
+            id=it.id,
+            case_id=it.case_id,
+            obligation_due_date=it.obligation_due_date.strftime("%d %b %Y") if hasattr(it.obligation_due_date, 'strftime') else str(it.obligation_due_date),
+            amount_contract_curr=round(it.amount_contract_curr, 2),
+            payment_date=it.payment_date.strftime("%d %b %Y") if hasattr(it.payment_date, 'strftime') else str(it.payment_date),
+            due_date_rate=round(it.due_date_rate, 4),
+            actual_payment_rate=round(it.actual_payment_rate, 4),
+            local_currency_impact=impact,
+            local_currency=local_curr,
+            notes=it.notes
+        ))
+        
+    return CurrencyGainLossResponse(
+        total_currency_impact=total_impact,
+        local_currency=local_currency,
+        contract_currency=contract_currency,
+        items=item_responses
     )

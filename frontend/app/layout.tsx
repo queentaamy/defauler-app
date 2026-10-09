@@ -2,7 +2,7 @@ import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
-import Navbar from "@/components/Navbar";
+import AppShell from "@/components/AppShell";
 
 const spaceGroteskHeading = Space_Grotesk({
   subsets: ["latin"],
@@ -43,15 +43,7 @@ export default function RootLayout({
     >
       <body className="min-h-screen bg-background text-foreground flex flex-col font-sans">
         <ThemeProvider>
-          <Navbar />
-          <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            {children}
-          </main>
-          <footer className="border-t py-6 bg-muted/30 text-center text-xs text-muted-foreground">
-            <div className="max-w-7xl mx-auto px-4">
-              Court Order & Payment Agreement Defaulter Tracking System • Deterministic Calculation Engine
-            </div>
-          </footer>
+          <AppShell>{children}</AppShell>
         </ThemeProvider>
       </body>
     </html>

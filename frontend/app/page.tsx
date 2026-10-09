@@ -71,19 +71,34 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Header section */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight font-heading text-foreground">
-            Settlement Agreements & Default Tracker
-          </h1>
+          <div className="flex items-center space-x-2">
+            <h1 className="text-3xl font-extrabold tracking-tight font-heading text-foreground">
+              Accrue Legal Recovery Engine
+            </h1>
+            <Badge variant="outline" className="text-xs font-semibold">
+              Universal Merchant Bank
+            </Badge>
+          </div>
           <p className="text-muted-foreground mt-1 text-sm">
-            Monitor defendant payment accounts, enforce agreed terms, detect defaults, and calculate gains/losses.
+            Deterministic debt monitoring, milestone settlement breach evaluation, and court order judgment ledgers.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Link href="/upload" className={buttonVariants({ size: "default", className: "shadow-xs gap-2 font-bold" })}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/cases/new-settlement">
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center space-x-1.5 text-xs h-9 shadow-xs">
+              <span>+ New Settlement Account</span>
+            </Button>
+          </Link>
+          <Link href="/cases/new-judgment">
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center space-x-1.5 text-xs h-9 shadow-xs">
+              <span>+ New Judgment Debt</span>
+            </Button>
+          </Link>
+          <Link href="/upload" className={buttonVariants({ variant: "outline", size: "sm", className: "h-9 gap-1.5 font-bold" })}>
             <UploadCloud className="w-4 h-4" />
-            <span>Upload Agreement Terms</span>
+            <span>Import</span>
           </Link>
         </div>
       </div>
