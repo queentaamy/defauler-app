@@ -238,6 +238,80 @@ export default function CalculationReportPage({ params }: { params: Promise<{ id
           </div>
         </div>
 
+        {/* Default Gains & Losses Analysis */}
+        {caseData.gains_and_losses && (
+          <div className="space-y-4">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+              <span>4. Default Gains &amp; Losses Analysis (Creditor vs. Debtor Financial Impact)</span>
+              <Badge variant={caseData.gains_and_losses.has_defaulted ? "destructive" : "outline"} className="text-[10px]">
+                {caseData.gains_and_losses.has_defaulted
+                  ? `${caseData.gains_and_losses.defaulted_periods_count} Period(s) in Default`
+                  : "No Default Detected"}
+              </Badge>
+            </h2>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-muted/20 p-4 rounded-lg text-xs">
+              <div>
+                <div className="text-muted-foreground">Expected by Scheduled Terms:</div>
+                <div className="font-semibold">{agr?.currency} {caseData.gains_and_losses.total_expected_to_date.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Actual Received:</div>
+                <div className="font-semibold text-emerald-600">{agr?.currency} {caseData.gains_and_losses.total_paid_to_date.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Creditor Cash Flow Shortfall:</div>
+                <div className="font-semibold text-amber-600">{agr?.currency} {caseData.gains_and_losses.cash_flow_shortfall.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Default Penalties &amp; Interest:</div>
+                <div className="font-semibold text-destructive">{agr?.currency} {(caseData.gains_and_losses.total_default_penalties + caseData.gains_and_losses.total_accrued_interest).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              </div>
+            </div>
+
+            {caseData.gains_and_losses.periods.length > 0 && (
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-muted/40">
+                    <TableRow>
+                      <TableHead>Instalment</TableHead>
+                      <TableHead>Due Date</TableHead>
+                      <TableHead className="text-right">Scheduled</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Creditor Shortfall</TableHead>
+                      <TableHead className="text-right">Penalties / Default Int.</TableHead>
+                      <TableHead className="text-right">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody className="text-xs">
+                    {caseData.gains_and_losses.periods.map((p) => (
+                      <TableRow key={p.instalment_number} className={p.is_defaulted ? "bg-destructive/5" : ""}>
+                        <TableCell className="font-medium">#{p.instalment_number}</TableCell>
+                        <TableCell>{p.due_date}</TableCell>
+                        <TableCell className="text-right font-mono">{agr?.currency} {p.amount_due.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell className="text-right font-mono text-emerald-600">{agr?.currency} {p.amount_paid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell className="text-right font-mono text-amber-600">
+                          {p.shortfall > 0 ? `${agr?.currency} ${p.shortfall.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "-"}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-destructive">
+                          {(p.period_penalty + p.period_interest) > 0
+                            ? `+ ${agr?.currency} ${(p.period_penalty + p.period_interest).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                            : "-"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant={p.is_defaulted ? "destructive" : p.days_overdue > 0 ? "secondary" : "outline"} className="text-[10px]">
+                            {p.is_defaulted ? `Default (${p.days_overdue}d)` : p.days_overdue > 0 ? "Overdue" : "Paid / Pending"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Certification Signoff */}
         <div className="border-t pt-8 grid grid-cols-2 gap-8 text-xs text-muted-foreground">
           <div className="space-y-8">

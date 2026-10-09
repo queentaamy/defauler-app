@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   Scale, 
   AlertTriangle, 
@@ -12,17 +13,23 @@ import {
   ArrowRight, 
   TrendingUp, 
   FileText, 
-  Building 
+  Building,
+  Search,
+  User,
+  FolderLock
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getDashboardStats, DashboardStats } from "@/lib/api";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [quickSearch, setQuickSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -39,6 +46,15 @@ export default function DashboardPage() {
     fetchStats();
   }, []);
 
+  const handleQuickSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (quickSearch.trim()) {
+      router.push(`/cases?q=${encodeURIComponent(quickSearch.trim())}`);
+    } else {
+      router.push("/cases");
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "defaulted":
@@ -53,24 +69,41 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header section */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight font-heading">
-            Court Orders & Payment Dashboard
+          <h1 className="text-3xl font-extrabold tracking-tight font-heading text-foreground">
+            Settlement Agreements & Default Tracker
           </h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Monitor court-mandated debt obligations, detect defaulters, and track outstanding balances.
+            Monitor defendant payment accounts, enforce agreed terms, detect defaults, and calculate gains/losses.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Link href="/upload" className={buttonVariants({ size: "lg", className: "shadow-sm gap-2" })}>
+        <div className="flex items-center gap-2">
+          <Link href="/upload" className={buttonVariants({ size: "default", className: "shadow-xs gap-2 font-bold" })}>
             <UploadCloud className="w-4 h-4" />
-            <span>Upload Court Order</span>
+            <span>Upload Agreement Terms</span>
           </Link>
         </div>
       </div>
+
+      {/* Quick Defendant Account Lookup Bar */}
+      <form onSubmit={handleQuickSearchSubmit} className="flex gap-2 p-2 bg-card border rounded-xl shadow-xs">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
+          <Input
+            placeholder="Type defendant name to view account or calculate default impact..."
+            value={quickSearch}
+            onChange={(e) => setQuickSearch(e.target.value)}
+            className="pl-9 border-0 shadow-none text-xs focus-visible:ring-0"
+          />
+        </div>
+        <Button type="submit" size="sm" className="font-semibold text-xs gap-1.5">
+          <User className="w-3.5 h-3.5" />
+          <span>Find Account</span>
+        </Button>
+      </form>
 
       {/* Metrics Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">

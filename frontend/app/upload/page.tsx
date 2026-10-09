@@ -16,14 +16,17 @@ import {
   DollarSign,
   Percent,
   RefreshCw,
-  Building
+  Building,
+  User,
+  PenTool,
+  Sparkles,
+  Info
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { uploadDocument, createCase, ExtractedAgreementData } from "@/lib/api";
 
@@ -32,27 +35,36 @@ export default function UploadAndReviewPage() {
 
   // State
   const [step, setStep] = useState<"upload" | "review">("upload");
+  const [entryMode, setEntryMode] = useState<"file" | "manual">("file");
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Extracted and editable agreement state
-  const [formData, setFormData] = useState<ExtractedAgreementData | null>(null);
+  const [formData, setFormData] = useState<ExtractedAgreementData>({
+    case_number: "",
+    court_name: "",
+    defendant_name: "",
+    defendant_address: "",
+    defendant_contact: "",
+    original_amount: 10000,
+    currency: "USD",
+    payment_amount: 1000,
+    frequency: "monthly",
+    start_date: new Date().toISOString().split("T")[0],
+    instalments_count: 10,
+    interest_rate: 0,
+    penalty_rate_or_fixed: 5,
+    penalty_type: "percentage",
+    grace_period_days: 7,
+    default_conditions: "In the event of default on any instalment exceeding the grace period, penalty applies on overdue balance.",
+    exchange_rate: 1.0,
+  });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selected = e.target.files[0];
-      const validTypes = [
-        "application/pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/msword",
-        "image/png",
-        "image/jpeg",
-        "image/jpg",
-        "text/plain"
-      ];
-      
       const ext = selected.name.split(".").pop()?.toLowerCase();
       const validExts = ["pdf", "docx", "doc", "png", "jpg", "jpeg", "txt"];
 
@@ -79,7 +91,14 @@ export default function UploadAndReviewPage() {
 
     try {
       const extracted = await uploadDocument(file);
-      setFormData(extracted);
+      setFormData({
+        ...extracted,
+        start_date: extracted.start_date || new Date().toISOString().split("T")[0],
+        instalments_count: extracted.instalments_count || 1,
+        frequency: extracted.frequency || "monthly",
+        currency: extracted.currency || "USD",
+        penalty_type: extracted.penalty_type || "percentage",
+      });
       setStep("review");
     } catch (err: any) {
       setError(err.message || "Failed to process document");
@@ -88,30 +107,40 @@ export default function UploadAndReviewPage() {
     }
   };
 
+  const handleStartManualEntry = () => {
+    setError(null);
+    setStep("review");
+  };
+
   const handleFieldChange = (field: keyof ExtractedAgreementData, value: any) => {
-    if (!formData) return;
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       [field]: value,
-    });
+    }));
   };
 
   // Recalculate instalment amount when original amount or count changes
   const handleAmountOrCountChange = (originalAmount: number, count: number) => {
-    if (!formData) return;
     const safeCount = Math.max(1, count);
     const paymentAmt = Math.round((originalAmount / safeCount) * 100) / 100;
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       original_amount: originalAmount,
       instalments_count: safeCount,
       payment_amount: paymentAmt,
-    });
+    }));
   };
 
   const handleConfirmAndCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData) return;
+    if (!formData.defendant_name.trim()) {
+      setError("Please type the defendant name to create their account.");
+      return;
+    }
+    if (formData.original_amount <= 0) {
+      setError("Original agreement amount must be greater than zero.");
+      return;
+    }
 
     setIsCreating(true);
     setError(null);
@@ -120,14 +149,13 @@ export default function UploadAndReviewPage() {
       const createdCase = await createCase(formData);
       router.push(`/cases/${createdCase.id}`);
     } catch (err: any) {
-      setError(err.message || "Failed to create case");
+      setError(err.message || "Failed to create defendant account and agreement");
       setIsCreating(false);
     }
   };
 
   // Generate a live preview of schedule items
   const renderSchedulePreview = () => {
-    if (!formData) return null;
     const items = [];
     const count = Math.max(1, formData.instalments_count);
     const baseAmt = Math.round((formData.original_amount / count) * 100) / 100;
@@ -160,36 +188,43 @@ export default function UploadAndReviewPage() {
       } else if (formData.frequency === "quarterly") {
         dueDate.setMonth(dueDate.getMonth() + 3);
       } else if (formData.frequency === "lump_sum") {
-        // lump sum stays same date
+        // lump sum stays same
       } else {
         dueDate.setMonth(dueDate.getMonth() + 1);
       }
     }
 
     return (
-      <div className="border rounded-md overflow-hidden bg-card mt-4">
+      <div className="border rounded-md overflow-hidden bg-card mt-3">
         <Table>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead className="w-20">Instalment</TableHead>
+              <TableHead className="w-16">#</TableHead>
               <TableHead>Due Date</TableHead>
-              <TableHead className="text-right">Amount ({formData.currency})</TableHead>
-              <TableHead>Initial Status</TableHead>
+              <TableHead className="text-right">Agreed Due ({formData.currency})</TableHead>
+              <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((it) => (
+            {items.slice(0, 12).map((it) => (
               <TableRow key={it.num}>
-                <TableCell className="font-semibold text-xs">#{it.num}</TableCell>
-                <TableCell className="text-xs">{it.due}</TableCell>
-                <TableCell className="text-right font-mono text-xs font-medium">
+                <TableCell className="font-semibold text-xs">Instalment #{it.num}</TableCell>
+                <TableCell className="text-xs font-mono">{it.due}</TableCell>
+                <TableCell className="text-right font-mono text-xs font-bold text-foreground">
                   {formData.currency} {it.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline" className="text-[11px]">Upcoming</Badge>
+                  <Badge variant="outline" className="text-[10px]">Upcoming</Badge>
                 </TableCell>
               </TableRow>
             ))}
+            {items.length > 12 && (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-xs text-muted-foreground italic py-2">
+                  + {items.length - 12} more instalments will be generated...
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </div>
@@ -197,215 +232,277 @@ export default function UploadAndReviewPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-6">
       {/* Stepper Navigation */}
-      <div className="flex items-center justify-between border-b pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b pb-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight font-heading">
-            {step === "upload" ? "Upload Court Order / Agreement" : "Review Extracted Terms"}
+            {step === "upload" ? "Upload Agreement Terms & Open Account" : "Configure Defendant Account & Terms"}
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             {step === "upload" 
-              ? "Upload a PDF, DOCX, or scanned image to automatically extract payment terms." 
-              : "Verify and adjust extracted terms before generating the enforceable payment schedule."}
+              ? "Upload the terms of settlement / agreement document or enter the terms directly." 
+              : "Review terms, assign defendant name, and open their monitored debt account."}
           </p>
         </div>
         <div className="flex items-center space-x-2 text-xs font-medium">
-          <span className={`px-2.5 py-1 rounded-full ${step === "upload" ? "bg-primary text-primary-foreground font-bold" : "bg-muted text-muted-foreground"}`}>
-            1. Upload
+          <span className={`px-3 py-1 rounded-full ${step === "upload" ? "bg-primary text-primary-foreground font-bold" : "bg-muted text-muted-foreground"}`}>
+            1. Terms Input
           </span>
           <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
-          <span className={`px-2.5 py-1 rounded-full ${step === "review" ? "bg-primary text-primary-foreground font-bold" : "bg-muted text-muted-foreground"}`}>
-            2. Review & Confirm
+          <span className={`px-3 py-1 rounded-full ${step === "review" ? "bg-primary text-primary-foreground font-bold" : "bg-muted text-muted-foreground"}`}>
+            2. Defendant Account & Review
           </span>
         </div>
       </div>
 
       {error && (
-        <div className="flex items-center gap-3 p-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">
-          <AlertCircle className="w-5 h-5 shrink-0" />
-          <span>{error}</span>
+        <div className="flex items-start gap-3 p-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg">
+          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <span className="font-semibold block">Notice</span>
+            <p>{error}</p>
+          </div>
         </div>
       )}
 
-      {/* STEP 1: Upload */}
+      {/* STEP 1: Upload or Direct Entry */}
       {step === "upload" && (
-        <Card className="shadow-xs">
-          <CardHeader>
-            <CardTitle>Select Document</CardTitle>
-            <CardDescription>
-              Supported formats: PDF files, DOCX files, JPG images, PNG images (Max 25MB).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="border-2 border-dashed rounded-xl p-8 text-center hover:border-primary/50 transition-colors bg-muted/10 relative">
-              <input
-                type="file"
-                accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt"
-                onChange={handleFileChange}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                disabled={isUploading}
-              />
-              <div className="flex flex-col items-center justify-center space-y-3">
-                <div className="w-14 h-14 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-                  <UploadCloud className="w-7 h-7" />
-                </div>
-                <div>
-                  <span className="font-semibold text-foreground text-sm">
-                    Click to browse or drag and drop court order
-                  </span>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Consent Orders, Settlement Agreements, Default Judgments, Terms of Settlement
-                  </p>
-                </div>
+        <div className="space-y-4">
+          {/* Mode Switcher */}
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setEntryMode("file")}
+              className={`p-4 rounded-xl border text-left transition-all ${
+                entryMode === "file"
+                  ? "border-primary bg-primary/5 ring-1 ring-primary shadow-xs"
+                  : "border-border bg-card hover:bg-muted/50 text-muted-foreground"
+              }`}
+            >
+              <div className="flex items-center gap-2 font-semibold text-sm text-foreground mb-1">
+                <UploadCloud className="w-4 h-4 text-primary" />
+                <span>Upload Terms Document</span>
               </div>
-            </div>
+              <p className="text-xs text-muted-foreground">
+                Upload terms of settlement or consent agreement (DOCX, PDF, image) to extract automatically.
+              </p>
+            </button>
 
-            {file && (
-              <div className="flex items-center justify-between p-4 bg-muted/30 border rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 rounded-md bg-background border">
-                    {file.name.match(/\.(jpg|jpeg|png)$/i) ? (
-                      <ImageIcon className="w-5 h-5 text-blue-500" />
-                    ) : (
-                      <FileText className="w-5 h-5 text-primary" />
-                    )}
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-foreground">{file.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {(file.size / (1024 * 1024)).toFixed(2)} MB
+            <button
+              type="button"
+              onClick={() => setEntryMode("manual")}
+              className={`p-4 rounded-xl border text-left transition-all ${
+                entryMode === "manual"
+                  ? "border-primary bg-primary/5 ring-1 ring-primary shadow-xs"
+                  : "border-border bg-card hover:bg-muted/50 text-muted-foreground"
+              }`}
+            >
+              <div className="flex items-center gap-2 font-semibold text-sm text-foreground mb-1">
+                <PenTool className="w-4 h-4 text-primary" />
+                <span>Enter Terms Directly</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Type the defendant's name and terms of agreement without uploading a file.
+              </p>
+            </button>
+          </div>
+
+          {entryMode === "file" ? (
+            <Card className="shadow-xs">
+              <CardHeader>
+                <CardTitle className="text-base font-bold">Select Agreement Terms Document</CardTitle>
+                <CardDescription className="text-xs">
+                  Supported formats: DOCX files, PDF files, JPG images, PNG images (Max 25MB).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="border-2 border-dashed rounded-xl p-8 text-center hover:border-primary/50 transition-colors bg-muted/10 relative">
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.txt"
+                    onChange={handleFileChange}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    disabled={isUploading}
+                  />
+                  <div className="flex flex-col items-center justify-center space-y-3">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                      <UploadCloud className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <span className="font-semibold text-foreground text-sm">
+                        Click to browse or drag and drop agreement terms
+                      </span>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Terms of Settlement, Consent Agreements, Payment Orders
+                      </p>
                     </div>
                   </div>
                 </div>
-                <Badge variant="outline" className="text-xs">Ready for extraction</Badge>
-              </div>
-            )}
-          </CardContent>
-          <CardFooter className="flex justify-between border-t pt-4">
-            <Button variant="ghost" onClick={() => router.push("/")}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleUploadAndExtract}
-              disabled={!file || isUploading}
-              className="gap-2"
-            >
-              {isUploading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Extracting Agreement Terms...</span>
-                </>
-              ) : (
-                <>
-                  <span>Extract Obligations</span>
+
+                {file && (
+                  <div className="flex items-center justify-between p-3.5 bg-muted/30 border rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 rounded-md bg-background border">
+                        {file.name.match(/\.(jpg|jpeg|png)$/i) ? (
+                          <ImageIcon className="w-5 h-5 text-blue-500" />
+                        ) : (
+                          <FileText className="w-5 h-5 text-primary" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-foreground">{file.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {(file.size / (1024 * 1024)).toFixed(2)} MB
+                        </div>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-xs">Ready for extraction</Badge>
+                  </div>
+                )}
+              </CardContent>
+              <CardFooter className="flex justify-between border-t pt-4">
+                <Button variant="ghost" size="sm" onClick={() => router.push("/cases")}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleUploadAndExtract}
+                  disabled={!file || isUploading}
+                  className="gap-2"
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Extracting Agreement Terms...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Extract Terms & Continue</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </Button>
+              </CardFooter>
+            </Card>
+          ) : (
+            <Card className="shadow-xs">
+              <CardHeader>
+                <CardTitle className="text-base font-bold">Direct Agreement Entry</CardTitle>
+                <CardDescription className="text-xs">
+                  Create a defendant account and define the agreed payment schedule directly.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 flex items-start gap-3">
+                  <User className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground">Open Defendant Account</h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      You will configure the defendant's details, agreed total amount, instalment schedule, and default penalties in the next step.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+              <CardFooter className="flex justify-between border-t pt-4">
+                <Button variant="ghost" size="sm" onClick={() => router.push("/cases")}>
+                  Cancel
+                </Button>
+                <Button onClick={handleStartManualEntry} className="gap-2">
+                  <span>Proceed to Enter Terms</span>
                   <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </Button>
-          </CardFooter>
-        </Card>
+                </Button>
+              </CardFooter>
+            </Card>
+          )}
+        </div>
       )}
 
-      {/* STEP 2: Review & Edit Information */}
-      {step === "review" && formData && (
+      {/* STEP 2: Review & Configure Account */}
+      {step === "review" && (
         <form onSubmit={handleConfirmAndCreate} className="space-y-6">
-          {/* Fixed Plaintiff Banner */}
-          <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <ShieldCheck className="w-5 h-5 text-primary mt-0.5" />
-              <div>
-                <div className="text-xs font-bold uppercase tracking-wider text-primary">
-                  Fixed Plaintiff Configuration
-                </div>
-                <div className="text-sm font-semibold text-foreground mt-0.5">
-                  Plaintiff Name: Universal Merchant Bank
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Address: [PLAINTIFF ADDRESS] • Contact: [PLAINTIFF CONTACT]
-                </div>
-              </div>
-            </div>
-            <Badge variant="outline" className="text-[10px] uppercase font-bold shrink-0">
-              System Fixed
-            </Badge>
-          </div>
-
-          {/* Case & Court Information */}
-          <Card className="shadow-xs">
+          {/* Defendant Account Identification */}
+          <Card className="shadow-xs border-primary/30 bg-primary/5">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-bold">1. Case & Court Details</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="case_number">Case / Suit Number</Label>
-                <Input
-                  id="case_number"
-                  value={formData.case_number}
-                  onChange={(e) => handleFieldChange("case_number", e.target.value)}
-                  required
-                />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base font-bold">1. Defendant Account</CardTitle>
+                    <CardDescription className="text-xs">
+                      Type the defendant name to create their account and link the agreement.
+                    </CardDescription>
+                  </div>
+                </div>
+                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs font-semibold">
+                  Required Account
+                </Badge>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="court_name">Court / Tribunal</Label>
-                <Input
-                  id="court_name"
-                  value={formData.court_name}
-                  onChange={(e) => handleFieldChange("court_name", e.target.value)}
-                  placeholder="e.g. High Court of Justice"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Defendant Information */}
-          <Card className="shadow-xs">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-bold">2. Defendant Details</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="defendant_name">Defendant Full Name</Label>
+              <div className="space-y-1.5 md:col-span-1">
+                <Label htmlFor="defendant_name" className="text-xs font-semibold">
+                  Defendant / Debtor Name <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   id="defendant_name"
+                  placeholder="e.g. Ghana Alu Limited"
                   value={formData.defendant_name}
                   onChange={(e) => handleFieldChange("defendant_name", e.target.value)}
+                  className="font-semibold text-sm"
                   required
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="defendant_address">Defendant Address</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="defendant_contact" className="text-xs font-semibold">
+                  Contact / Phone / Email
+                </Label>
                 <Input
-                  id="defendant_address"
-                  value={formData.defendant_address || ""}
-                  onChange={(e) => handleFieldChange("defendant_address", e.target.value)}
-                  placeholder="Residential or business address"
+                  id="defendant_contact"
+                  placeholder="e.g. +233 24 123 4567"
+                  value={formData.defendant_contact || ""}
+                  onChange={(e) => handleFieldChange("defendant_contact", e.target.value)}
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="defendant_contact">Contact / Phone / Email</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="defendant_address" className="text-xs font-semibold">
+                  Business / Residential Address
+                </Label>
                 <Input
-                  id="defendant_contact"
-                  value={formData.defendant_contact || ""}
-                  onChange={(e) => handleFieldChange("defendant_contact", e.target.value)}
-                  placeholder="+233 20 000 0000"
+                  id="defendant_address"
+                  placeholder="e.g. Plot 10, Spintex Road, Accra"
+                  value={formData.defendant_address || ""}
+                  onChange={(e) => handleFieldChange("defendant_address", e.target.value)}
                 />
               </div>
             </CardContent>
           </Card>
 
-          {/* Financial Terms */}
+          {/* Terms of Agreement */}
           <Card className="shadow-xs">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-bold">3. Financial Terms & Schedule</CardTitle>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base font-bold">2. Terms of Agreement</CardTitle>
+                  <CardDescription className="text-xs">
+                    Specify the payment amounts, frequency, grace period, and default rules.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="text-xs">
+                  Modifiable anytime
+                </Badge>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Row 1: Amounts & Frequency */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="original_amount">Original Debt Amount</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="original_amount" className="text-xs font-semibold">
+                    Total Agreed Obligation <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="original_amount"
                     type="number"
@@ -414,23 +511,29 @@ export default function UploadAndReviewPage() {
                     onChange={(e) =>
                       handleAmountOrCountChange(parseFloat(e.target.value) || 0, formData.instalments_count)
                     }
+                    className="font-bold text-sm"
                     required
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="currency">Currency</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="currency" className="text-xs font-semibold">
+                    Currency <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="currency"
                     value={formData.currency}
                     onChange={(e) => handleFieldChange("currency", e.target.value.toUpperCase())}
                     placeholder="USD, GHS, GBP, EUR"
+                    className="font-mono uppercase font-bold"
                     required
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="instalments_count">No. of Instalments</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="instalments_count" className="text-xs font-semibold">
+                    No. of Instalments <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="instalments_count"
                     type="number"
@@ -444,8 +547,10 @@ export default function UploadAndReviewPage() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="frequency">Payment Frequency</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="frequency" className="text-xs font-semibold">
+                    Payment Frequency
+                  </Label>
                   <select
                     id="frequency"
                     className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
@@ -461,9 +566,12 @@ export default function UploadAndReviewPage() {
                 </div>
               </div>
 
+              {/* Row 2: Instalment amount & dates */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="payment_amount">Amount Per Instalment</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="payment_amount" className="text-xs font-semibold">
+                    Amount Per Instalment
+                  </Label>
                   <Input
                     id="payment_amount"
                     type="number"
@@ -474,8 +582,10 @@ export default function UploadAndReviewPage() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="start_date">First Payment Due Date</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="start_date" className="text-xs font-semibold">
+                    First Due Date <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="start_date"
                     type="date"
@@ -485,8 +595,24 @@ export default function UploadAndReviewPage() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="interest_rate">Interest Rate (% p.a.)</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="grace_period_days" className="text-xs font-semibold">
+                    Grace Period (Days)
+                  </Label>
+                  <Input
+                    id="grace_period_days"
+                    type="number"
+                    min="0"
+                    max="60"
+                    value={formData.grace_period_days}
+                    onChange={(e) => handleFieldChange("grace_period_days", parseInt(e.target.value) || 0)}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="interest_rate" className="text-xs font-semibold">
+                    Interest Rate (% p.a.)
+                  </Label>
                   <Input
                     id="interest_rate"
                     type="number"
@@ -495,107 +621,93 @@ export default function UploadAndReviewPage() {
                     onChange={(e) => handleFieldChange("interest_rate", parseFloat(e.target.value) || 0)}
                   />
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="grace_period_days">Grace Period (Days)</Label>
-                  <Input
-                    id="grace_period_days"
-                    type="number"
-                    value={formData.grace_period_days}
-                    onChange={(e) => handleFieldChange("grace_period_days", parseInt(e.target.value) || 0)}
-                  />
-                </div>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Default and Penalty Terms */}
-          <Card className="shadow-xs">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-bold">4. Default Penalties & Multi-Currency Rules</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="penalty_type">Penalty Type</Label>
+              {/* Row 3: Penalty Terms & Conditions */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="penalty_type" className="text-xs font-semibold">
+                    Default Penalty Type
+                  </Label>
                   <select
                     id="penalty_type"
-                    className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+                    className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
                     value={formData.penalty_type}
                     onChange={(e) => handleFieldChange("penalty_type", e.target.value)}
                   >
-                    <option value="none">No Penalty</option>
                     <option value="percentage">Percentage on Arrears (%)</option>
+                    <option value="per_day">Per-Day Penalty Amount</option>
                     <option value="fixed_fee">Fixed Penalty Fee</option>
-                    <option value="per_day">Per-Day Late Fee</option>
+                    <option value="none">No Penalty Clause</option>
                   </select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="penalty_rate_or_fixed">Penalty Value</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="penalty_rate_or_fixed" className="text-xs font-semibold">
+                    Penalty Value ({formData.penalty_type === "percentage" ? "%" : formData.currency})
+                  </Label>
                   <Input
                     id="penalty_rate_or_fixed"
                     type="number"
-                    step="0.01"
+                    step="0.1"
                     value={formData.penalty_rate_or_fixed}
-                    onChange={(e) =>
-                      handleFieldChange("penalty_rate_or_fixed", parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => handleFieldChange("penalty_rate_or_fixed", parseFloat(e.target.value) || 0)}
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="exchange_rate">Exchange Rate (Audit)</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="case_number" className="text-xs font-semibold flex items-center justify-between">
+                    <span>Agreement / Suit Ref</span>
+                    <span className="text-muted-foreground font-normal text-[11px]">(Optional)</span>
+                  </Label>
                   <Input
-                    id="exchange_rate"
-                    type="number"
-                    step="0.0001"
-                    value={formData.exchange_rate || 1.0}
-                    onChange={(e) => handleFieldChange("exchange_rate", parseFloat(e.target.value) || 1.0)}
+                    id="case_number"
+                    placeholder="Auto-generated if empty"
+                    value={formData.case_number}
+                    onChange={(e) => handleFieldChange("case_number", e.target.value)}
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="default_conditions">Extracted Default Trigger Conditions</Label>
+              {/* Default Conditions */}
+              <div className="space-y-1.5 pt-2">
+                <Label htmlFor="default_conditions" className="text-xs font-semibold">
+                  Default Clause / Conditions
+                </Label>
                 <Input
                   id="default_conditions"
+                  placeholder="e.g. In the event of default on any instalment exceeding 7 days, entire sum becomes immediately due."
                   value={formData.default_conditions || ""}
                   onChange={(e) => handleFieldChange("default_conditions", e.target.value)}
-                  placeholder="e.g. Failure to pay within 7 days of due date constitutes default"
                 />
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Live Schedule Preview */}
-          <Card className="shadow-xs">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base font-bold">Generated Payment Schedule Preview</CardTitle>
-              <CardDescription>
-                Calculated deterministically based on your verified terms.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {renderSchedulePreview()}
+              {/* Schedule Preview */}
+              <div className="pt-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold text-foreground">Generated Instalment Schedule Preview</Label>
+                  <span className="text-xs text-muted-foreground">{formData.instalments_count} instalments • {formData.frequency}</span>
+                </div>
+                {renderSchedulePreview()}
+              </div>
             </CardContent>
           </Card>
 
           {/* Action buttons */}
-          <div className="flex items-center justify-between pt-4 border-t">
-            <Button type="button" variant="outline" onClick={() => setStep("upload")} disabled={isCreating}>
-              Back to Upload
+          <div className="flex items-center justify-between border-t pt-4">
+            <Button type="button" variant="outline" size="sm" onClick={() => setStep("upload")}>
+              Back to Input
             </Button>
-            <Button type="submit" disabled={isCreating} className="gap-2">
+            <Button type="submit" size="default" disabled={isCreating} className="gap-2 font-bold shadow-sm">
               {isCreating ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Creating Case & Schedule...</span>
+                  <span>Opening Account...</span>
                 </>
               ) : (
                 <>
                   <CheckCircle className="w-4 h-4" />
-                  <span>Confirm & Create Payment Schedule</span>
+                  <span>Create Defendant Account & Enforce Terms</span>
                 </>
               )}
             </Button>

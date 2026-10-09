@@ -94,6 +94,64 @@ export interface CalculationBreakdown {
   calculation_date: string;
 }
 
+export interface PeriodDefaultImpact {
+  instalment_number: number;
+  due_date: string;
+  amount_due: number;
+  amount_paid: number;
+  shortfall: number;
+  days_overdue: number;
+  is_defaulted: boolean;
+  status: "upcoming" | "paid" | "partially_paid" | "overdue" | "defaulted";
+  period_interest: number;
+  period_penalty: number;
+  period_creditor_gain: number;
+  period_total_owed: number;
+}
+
+export interface GainsAndLossesBreakdown {
+  currency: string;
+  total_agreed: number;
+  total_expected_to_date: number;
+  total_paid_to_date: number;
+  cash_flow_shortfall: number;
+  unpaid_principal: number;
+  total_accrued_interest: number;
+  total_default_penalties: number;
+  total_creditor_gains: number;
+  total_debtor_penalty_loss: number;
+  total_current_owed: number;
+  defaulted_periods_count: number;
+  overdue_periods_count: number;
+  settled_periods_count: number;
+  has_defaulted: boolean;
+  default_clause_status: string;
+  evaluation_date: string;
+  periods: PeriodDefaultImpact[];
+}
+
+export interface AgreementUpdatePayload {
+  defendant_name?: string;
+  defendant_address?: string;
+  defendant_contact?: string;
+  case_number?: string;
+  court_name?: string;
+  original_amount?: number;
+  currency?: string;
+  payment_amount?: number;
+  frequency?: string;
+  start_date?: string;
+  instalments_count?: number;
+  interest_rate?: number;
+  penalty_rate_or_fixed?: number;
+  penalty_type?: string;
+  grace_period_days?: number;
+  default_conditions?: string;
+  exchange_rate?: number;
+  target_currency?: string;
+  regenerate_schedule?: boolean;
+}
+
 export interface CaseDetail {
   id: string;
   case_number: string;
@@ -128,6 +186,7 @@ export interface CaseDetail {
   payment_plans: PaymentPlanItem[];
   payments: PaymentRecord[];
   latest_calculation?: CalculationBreakdown;
+  gains_and_losses?: GainsAndLossesBreakdown;
 }
 
 export interface DashboardStats {
@@ -248,5 +307,60 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const baseUrl = getApiBaseUrl();
   const res = await safeFetch(`${baseUrl}/api/dashboard/stats`);
   if (!res.ok) throw new Error("Failed to fetch dashboard metrics");
+  return res.json();
+}
+
+export async function updateCase(caseId: string, payload: AgreementUpdatePayload): Promise<CaseDetail> {
+  const baseUrl = getApiBaseUrl();
+  const res = await safeFetch(`${baseUrl}/api/cases/${caseId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to update agreement terms");
+  }
+
+  return res.json();
+}
+
+export async function updateScheduleItem(
+  caseId: string,
+  itemId: string,
+  payload: { due_date?: string; amount_due?: number; notes?: string }
+): Promise<CaseDetail> {
+  const baseUrl = getApiBaseUrl();
+  const res = await safeFetch(`${baseUrl}/api/cases/${caseId}/schedule/${itemId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to update instalment");
+  }
+
+  return res.json();
+}
+
+export async function getGainsAndLosses(caseId: string): Promise<GainsAndLossesBreakdown> {
+  const baseUrl = getApiBaseUrl();
+  const res = await safeFetch(`${baseUrl}/api/cases/${caseId}/gains-and-losses`);
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to fetch gains and losses analysis");
+  }
+
+  return res.json();
+}
+
+export async function searchCases(query: string): Promise<CaseDetail[]> {
+  const baseUrl = getApiBaseUrl();
+  const res = await safeFetch(`${baseUrl}/api/cases/search?q=${encodeURIComponent(query)}`);
+  if (!res.ok) throw new Error("Failed to search accounts");
   return res.json();
 }

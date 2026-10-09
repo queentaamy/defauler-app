@@ -91,6 +91,66 @@ class AgreementResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class PeriodDefaultImpact(BaseModel):
+    instalment_number: int
+    due_date: str
+    amount_due: float
+    amount_paid: float
+    shortfall: float             # Unpaid amount for period (loss of expected cash flow)
+    days_overdue: int            # Days elapsed past due date
+    is_defaulted: bool           # Past grace period and unpaid
+    status: str                  # upcoming, paid, partially_paid, overdue, defaulted
+    period_interest: float       # Accrued interest on period shortfall
+    period_penalty: float        # Default penalty triggered for this period
+    period_creditor_gain: float  # Additional compensation / penalty claimable
+    period_total_owed: float     # Total period liability (shortfall + interest + penalty)
+
+class GainsAndLossesBreakdown(BaseModel):
+    currency: str
+    total_agreed: float
+    total_expected_to_date: float
+    total_paid_to_date: float
+    cash_flow_shortfall: float       # Creditor lost cash flow to date
+    unpaid_principal: float          # Remaining agreed principal
+    total_accrued_interest: float    # Accrued interest on debt
+    total_default_penalties: float   # Penalties assessed due to defaults
+    total_creditor_gains: float      # Additional claimable earnings from defaults (interest + penalties)
+    total_debtor_penalty_loss: float # Additional avoidable penalty cost incurred by debtor
+    total_current_owed: float        # Total enforceable claim today
+    defaulted_periods_count: int
+    overdue_periods_count: int
+    settled_periods_count: int
+    has_defaulted: bool
+    default_clause_status: str
+    evaluation_date: str
+    periods: List[PeriodDefaultImpact]
+
+class AgreementUpdateRequest(BaseModel):
+    defendant_name: Optional[str] = None
+    defendant_address: Optional[str] = None
+    defendant_contact: Optional[str] = None
+    case_number: Optional[str] = None
+    court_name: Optional[str] = None
+    original_amount: Optional[float] = None
+    currency: Optional[str] = None
+    payment_amount: Optional[float] = None
+    frequency: Optional[str] = None
+    start_date: Optional[str] = None  # YYYY-MM-DD
+    instalments_count: Optional[int] = None
+    interest_rate: Optional[float] = None
+    penalty_rate_or_fixed: Optional[float] = None
+    penalty_type: Optional[str] = None
+    grace_period_days: Optional[int] = None
+    default_conditions: Optional[str] = None
+    exchange_rate: Optional[float] = None
+    target_currency: Optional[str] = None
+    regenerate_schedule: bool = False
+
+class PaymentPlanItemUpdateRequest(BaseModel):
+    due_date: Optional[str] = None   # YYYY-MM-DD
+    amount_due: Optional[float] = None
+    notes: Optional[str] = None
+
 class CalculationBreakdown(BaseModel):
     original_amount: float
     total_paid: float
@@ -120,6 +180,7 @@ class CaseDetailResponse(BaseModel):
     payment_plans: List[PaymentPlanItemResponse] = []
     payments: List[PaymentResponse] = []
     latest_calculation: Optional[CalculationBreakdown] = None
+    gains_and_losses: Optional[GainsAndLossesBreakdown] = None
 
 class DashboardStatsResponse(BaseModel):
     total_cases: int

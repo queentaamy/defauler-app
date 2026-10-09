@@ -10,8 +10,8 @@ export default function Navbar() {
 
   const navItems = [
     { label: "Dashboard", href: "/", icon: LayoutDashboard },
-    { label: "Cases", href: "/cases", icon: FolderLock },
-    { label: "Upload Order", href: "/upload", icon: PlusCircle },
+    { label: "Defendant Accounts", href: "/cases", icon: FolderLock },
+    { label: "Upload Agreement", href: "/upload", icon: PlusCircle },
   ];
 
   return (
