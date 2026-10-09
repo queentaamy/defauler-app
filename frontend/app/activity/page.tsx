@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { getCases, CaseDetail } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 interface ActivityItem {
   id: string;
@@ -30,6 +31,7 @@ interface ActivityItem {
 export default function ActivityPage() {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadActivity() {
@@ -84,8 +86,8 @@ export default function ActivityPage() {
         // Sort descending by date
         items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setActivities(items);
-      } catch (err) {
-        console.error("Failed to load activity feed:", err);
+      } catch (err: any) {
+        setError(err?.message || "Failed to load activity feed.");
       } finally {
         setLoading(false);
       }
@@ -109,6 +111,18 @@ export default function ActivityPage() {
           Chronological audit trail of debt recovery events, logged receipts, and automated breach evaluations.
         </p>
       </div>
+
+      {error && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span>{error}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => window.location.reload()} className="h-7 text-xs">
+            Retry Connection
+          </Button>
+        </div>
+      )}
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
         {loading ? (

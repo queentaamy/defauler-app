@@ -24,6 +24,7 @@ export default function SettlementsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "breached" | "on_track">("all");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSettlements();
@@ -32,10 +33,11 @@ export default function SettlementsPage() {
   const fetchSettlements = async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await getCases("settlement");
       setCases(data);
-    } catch (err) {
-      console.error("Failed to load settlements:", err);
+    } catch (err: any) {
+      setError(err?.message || "Failed to load settlement accounts.");
     } finally {
       setLoading(false);
     }
@@ -160,6 +162,18 @@ export default function SettlementsPage() {
           </button>
         </div>
       </div>
+
+      {error && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span>{error}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={fetchSettlements} className="h-7 text-xs">
+            Retry Connection
+          </Button>
+        </div>
+      )}
 
       {/* Settlements Table / List */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">

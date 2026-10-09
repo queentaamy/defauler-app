@@ -28,6 +28,7 @@ export default function CasesListPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "settlement" | "judgment_debt">("all");
   const [showArchived, setShowArchived] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadAccounts();
@@ -36,11 +37,12 @@ export default function CasesListPage() {
   const loadAccounts = async () => {
     try {
       setLoading(true);
+      setError(null);
       const filterType = typeFilter === "all" ? undefined : typeFilter;
       const data = await getCases(filterType, showArchived);
       setCases(data);
-    } catch (err) {
-      console.error("Failed to load accounts:", err);
+    } catch (err: any) {
+      setError(err?.message || "Failed to load accounts from backend server.");
     } finally {
       setLoading(false);
     }
@@ -156,6 +158,18 @@ export default function CasesListPage() {
           </label>
         </div>
       </div>
+
+      {error && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span>{error}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadAccounts} className="h-7 text-xs">
+            Retry Connection
+          </Button>
+        </div>
+      )}
 
       {/* Accounts List Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">

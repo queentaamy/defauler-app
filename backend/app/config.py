@@ -3,8 +3,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 is_vercel = bool(os.environ.get("VERCEL"))
-default_db = "sqlite:////tmp/defaulter.db" if is_vercel else "sqlite:///./defaulter.db"
-default_upload = "/tmp/uploads" if is_vercel else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
+backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+default_db = "sqlite:////tmp/defaulter.db" if is_vercel else f"sqlite:///{os.path.join(backend_dir, 'defaulter.db').replace(os.sep, '/')}"
+default_upload = "/tmp/uploads" if is_vercel else os.path.join(backend_dir, "uploads")
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
